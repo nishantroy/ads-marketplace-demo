@@ -6,6 +6,7 @@ second-price auctions, and budget pacing over a replayable six-hour session.
 - [Implementation plan and progress](IMPLEMENTATION_PLAN.md)
 - [Engine specification](docs/engine-spec.md)
 - [Project agent rules](AGENTS.md)
+- [UI design principles](docs/ui-design-principles.md)
 
 ## Local setup
 
@@ -48,9 +49,13 @@ on `main`; this worktree does not include or change that in-progress engine work
 
 ### Try the UI preview
 
-Click **Load unpaced walkthrough**, then play, change speed, or scrub the six-hour timeline. Select a
-campaign to see spend against its target. **Inspect** a request to follow eligibility, ranking,
-runner-up price support, and budget deductions in the side sheet (Escape closes it).
+Click **Load unpaced walkthrough**, then play, change speed, or scrub the six-hour timeline. The
+marketplace revenue chart is the primary view. Expand **Follow one campaign** for spending against its
+target, **Why do impression prices change?** for competition/price charts, or **Inspect a request**
+for the request list and side sheet (Escape closes it). Candidate arithmetic starts collapsed.
+
+Scenario/next-run settings and the guide are also collapsed; the pacing formula lives under optional
+implementation details in the guide, not alongside the main playback controls.
 
 The preview uses four hand-authored requests from the documented tiny fixture, not engine-produced
 results. It only includes pacing off. The pacing switch sets a future-run preference; **Run simulation**
@@ -69,8 +74,13 @@ npm run build
 npx next start -p 3012 -H 127.0.0.1   # http://127.0.0.1:3012
 ```
 
-No new port or dependency is needed. API integration, matched pacing overlays, live request fetching,
-run history, and UI/playback testing remain later chunks. For now validation is typecheck, lint, build,
+No new port is needed. Charts now use **amCharts 5**, replacing Recharts. Chart roots are created only
+in the browser and disposed on unmount; playback updates data without recreating the chart. Cumulative
+spend axes use input-budget ceilings rather than hidden future results or continuously rescaling.
+Default amCharts attribution is retained, and its original license is served at
+[`/licenses/amcharts5-LICENSE.txt`](public/licenses/amcharts5-LICENSE.txt). Review licensing before public release.
+
+API integration, matched pacing overlays, live request fetching, run history, and UI/playback testing remain later chunks. For now validation is typecheck, lint, build,
 and an HTTP smoke check; visual/browser testing is deferred at the human's request.
 
 ## Layout
@@ -83,4 +93,13 @@ and an HTTP smoke check; visual/browser testing is deferred at the human's reque
   and clearly isolated hand-authored preview data. Replace the preview controller's data loading with
   API responses when the server lane is ready; the chart and sheet already consume contract-shaped values.
 
-Status: M0 complete; M4 UI preview chunk implemented on a separate worktree. Full M4 integration remains pending.
+## UI design direction
+
+[UI design principles](docs/ui-design-principles.md) are required reading for UI agents and are linked
+from `AGENTS.md`. Lead with the learning question, reveal complexity progressively, connect outcomes to
+causes, compare fairly, make motion useful, and explain decisions before showing formulas. These are
+presentation/interaction rules, not changes to the simulation contract. Theme polish can follow once
+the prototype flow works.
+
+Status: M0 complete; M4 UI preview and progressive-disclosure refinement implemented on a separate
+worktree. Full M4 integration remains pending.

@@ -5,6 +5,7 @@ Applies throughout this repository, in addition to `../AGENTS.md`.
 ## Scope and decisions
 
 - Read `IMPLEMENTATION_PLAN.md` before starting. Treat its simulation contract and milestone gates as the source of truth.
+- For any UI work, also read and follow `docs/ui-design-principles.md`. These are UI design principles: lead with the learning journey, reveal implementation details on demand, and keep the overview uncluttered. Use amCharts 5 for time-series charts; preserve its branding unless appropriately licensed.
 - Ask the human before crossing an undefined product boundary, changing simulation semantics, making an uncertain architectural choice, adding infrastructure, or expanding scope. Explain the ambiguity, recommend the smallest option, and state what it affects.
 - Do not block on routine implementation details already covered by the contract. Record consequential decisions in the plan.
 - Do not add features, dependencies, or abstractions merely for hypothetical future needs. Local prototype first; production deployment is not part of this build.

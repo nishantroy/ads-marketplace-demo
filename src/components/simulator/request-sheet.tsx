@@ -50,9 +50,10 @@ export function RequestSheet({ trace, scenario, onClose, preview = false }: {
           <li><b>{trace.participantCount}</b><span>Auction bidders</span></li>
         </ol>
         <p className="muted small">Score threshold ≥ {scenario.config.scoreThreshold} · Top {scenario.config.shortlistSize} qualify · Bids and prices are per impression.</p>
-        <h3 className="section-title">Follow each campaign</h3>
+        <h3 className="section-title">What happened to each campaign?</h3>
+        <p className="small muted">Expand a campaign if you want the scores, pacing decision, and budget arithmetic.</p>
         {trace.candidates.map(candidate => (
-          <details className="candidate-card" key={candidate.campaignId} open={candidate.outcome === "won"}>
+          <details className="candidate-card" key={candidate.campaignId}>
             <summary><span><strong>{name(candidate.campaignId)}</strong><small>{candidate.objective} objective</small></span>
               <span className={`badge ${candidate.outcome === "won" ? "green" : "neutral"}`}>{outcomes[candidate.outcome]}</span></summary>
             <dl className="trace-facts">

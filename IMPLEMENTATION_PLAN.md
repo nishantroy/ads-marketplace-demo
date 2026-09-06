@@ -205,6 +205,10 @@ Gate (prototype): unit tests for input validation and the repository interface; 
 
 ## M4 — Playback workspace and request inspection
 
+All UI work follows [UI design principles](docs/ui-design-principles.md). They govern presentation and interactions, not simulation semantics.
+
+UI refinement chunk implemented on `ui-workspace`: progressive disclosure, design-principle documentation/agent links, and the human-authorized Recharts → amCharts 5 dependency migration (`package.json` and lockfile included). Main's engine/API files remain untouched. UI testing stays deferred; full M4 remains IN PROGRESS.
+
 ### UI preview chunk (parallel worktree)
 
 - [x] Create isolated `ui-workspace` branch/worktree from `a47f34b`; leave M1 work on `main` untouched.
@@ -258,7 +262,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 
 | Question | Proposed default | Status |
 | --- | --- | --- |
-| Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; Recharts | Confirmed 2026-09-06 |
+| Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; amCharts 5 | Human changed chart library from Recharts to amCharts 5 in the UI refinement chunk |
 | Objective score definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp bases to [0,1], then multiply relevance | Confirmed 2026-09-06 |
 | Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics; scales chosen so a good campaign of any objective scores about 0.7–0.9 | Numeric values selected in M2 |
 | Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
@@ -309,3 +313,13 @@ Remaining blockers / next owner:
 - Manual preview server: `npx next start -p 3012 -H 127.0.0.1`; log `/tmp/ads-marketplace-ui-preview.log`. Main's development port 3002 is left free. No permanent port assignment changed.
 - Integration handoff: chart and request sheet consume frozen contract types; replace the isolated preview controller/data source with API loading once ready. Merge README/plan sections carefully because the M1 agent may also update them. Do not mark M4 DONE until real-data integration and the agreed manual gate pass.
 - Commit intent: `feat(ui): add isolated simulator workspace preview`.
+
+### M4 UI principles and progressive-disclosure refinement
+
+- Owner/branch: UI assistant / `ui-workspace`; no changes to main's worktree.
+- Human decisions: document explicit UI design principles for all agents; replace Recharts with amCharts; collapse secondary controls/views; keep formulas and implementation arithmetic optional. Continue to defer UI/playback tests and theme polish.
+- Paths: `docs/ui-design-principles.md`, `AGENTS.md`, README/plan, `src/components/simulator/{simulator-preview,request-sheet,timeline-chart}.tsx`, `src/app/globals.css`, `package.json`, `package-lock.json`, `public/licenses/amcharts5-LICENSE.txt`. Dependency edits specifically authorized by the human's chart-library change.
+- Implemented: one dominant revenue chart; collapsed scenario/settings, campaign chart, competition charts, request list, guide, and candidate arithmetic. amCharts roots mount client-side, update data during playback, and dispose on unmount. Fixed time domain and input-derived value bounds avoid future-result leakage and shifting scales. No engine, API, or comparison semantics changed.
+- Licensing: read the installed amCharts LICENSE; retain default branding and include the original license in public assets. No license key supplied or branding suppression. Review release requirements before hosting publicly.
+- Validation: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed. Refreshed the preview on reserved loopback port 3012; HTTP smoke checks returned 200 for `/` and `/licenses/amcharts5-LICENSE.txt`. `npm ls @amcharts/amcharts5 --depth=0` confirms 5.20.5. No automated UI/playback suite added or run. Human visual review and real-data integration remain pending.
+- Handoff: bring the design-principle document and AGENTS link into main along with the UI branch so all agents receive the rule. Preserve main's newer engine/M2 progress when merging plan/README conflicts. Reinstall dependencies after integration.
