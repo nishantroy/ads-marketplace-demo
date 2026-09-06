@@ -11,7 +11,7 @@ Compute a whole run server-side, persist it, then animate a lightweight timeline
 ### Scope decisions (confirmed 2026-09-06)
 
 - Verification load is deliberately light for the prototype: focused unit tests written alongside code, plus manual human testing. Real-database integration tests, Playwright/browser automation, rollback-on-failure tests, and similar hardening are deferred follow-ups, listed under "Deferred productionization" below.
-- Work lanes run sequentially with a single implementer; the parallel-lane boundaries below remain as path ownership guidance only.
+- Updated by human request: M1 continues on `main` with another agent; the UI lane now runs in parallel on branch `ui-workspace`, worktree `../ads-marketplace-demo-ui`. Shared contracts remain frozen; UI work does not edit engine/API/dependency files.
 - Get the basic simulator working end to end before wiring persistence. Postgres is provided by Neon (serverless Postgres compatible with Vercel), not a local Docker container. Until M3, runs live in an in-memory server-side store behind a small repository interface so Neon can replace it without touching the engine or UI.
 - Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
 - Superseded 2026-09-06: ranking order was originally static across requests, because relevance was per category and so common to every candidate. Campaigns now carry a per-segment affinity, making relevance a property of the user-campaign pair, so ranking order varies per request. See the utility auction decision below.
@@ -26,13 +26,13 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
 | M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | DONE | Claude (coordinating assistant) | Generator with baseline and small presets, budgets calibrated for full delivery (`baseline-2`); `docs/m2-diagnostics.md` committed; 44 tests, typecheck and lint pass |
-| M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
-| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
+| M3 | Live-demo API, no persistence (scope cut 2026-09-06) | M0; final integration M1/M2 | IN PROGRESS | API assistant (`api-integration`, worktree `../ads-marketplace-demo-api`) | Latest on/off result pair in server memory, no database or history. Built against a slightly older engine commit; needs a rebase onto the current utility-auction contract before merge. Not yet merged into main |
+| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant (merged from `ui-workspace`) | UI merged into main: workspace, playback, charts, request funnel/side sheet, all against a hand-authored preview walkthrough, not live engine output. Needs the preview data and any stale-contract references reconciled with the current utility-auction contract, then wiring to the M3 API once that merges. |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
 ### Work lane boundaries
 
-Lanes run sequentially (confirmed). After M0 freezes shared types and response examples, path ownership is:
+M1 and UI now run in separate worktrees per the latest human request. UI owns `src/components/simulator/**`, app page/layout/styles, and branch-local README/plan updates. It will not edit shared contracts, package files, or the other agent's working tree. After M0 freezes shared types, path ownership is:
 
 - Engine lane: `src/lib/simulation/**`, engine tests; owns M1 then M2.
 - Persistence lane: `src/lib/db/**`, migrations, `src/app/api/**`, API tests; owns M3. Use a tiny contract fixture until the engine is available.
@@ -176,9 +176,9 @@ Report: quality-qualified request coverage, filled requests, multiple-bidder auc
 
 Gate: accounting invariants pass for both modes; the report demonstrates understandable spend-pattern differences and assesses late competition. If it does not illustrate the intended lesson, discuss fixture tuning with the human before UI polish. Higher paced revenue is not a correctness assertion. Confirm an explicit coverage target with the human rather than treating “majority” as an unstated numeric requirement.
 
-## M3 — Persistence and APIs
+## M3 — Live-demo API (persistence cut 2026-09-06)
 
-Sequencing: an in-memory run store behind a repository interface is used from M1 onward so the UI can be exercised before any database exists. M3 replaces that store with Neon Postgres (Drizzle + node-postgres, `DATABASE_URL` from an ignored `.env.local`; a committed `.env.example` shows the shape). No local Docker Postgres is planned.
+Human decision: no database, no Neon, no run history. The API holds one immutable active scenario and, in server memory, only the latest completed result per pacing mode (at most two results at a time). Starting a run in a mode replaces that mode's result; reset regenerates the baseline and clears both. Restarting the server also clears them. This section describes the original Neon-based design for reference; it is superseded. The `api-integration` worktree/branch has the current live-demo API implementation and its own rewritten M3 section, and is not yet merged into main.
 
 Proposed minimal schema:
 
@@ -218,6 +218,25 @@ Tasks:
 Gate (prototype): unit tests for input validation and the repository interface; manual check that a run can be created, reloaded after a server restart, and reset preserves historical runs. Run the complete 4,000-request engine through the API and record runtime/output size. Real-database integration tests and rollback-on-failure coverage are deferred (see "Deferred productionization").
 
 ## M4 — Playback workspace and request inspection
+
+Request-funnel UI chunk implemented: the sheet now presents a connected trace-derived journey. Owned paths: `src/components/simulator/{request-sheet,request-funnel}.tsx`, funnel CSS, README/plan, and UI design principles on `ui-workspace`. No shared types, engine, API, or dependency edits. UI/playback tests remain deferred; human visual review and full M4 integration are still pending.
+
+All UI work follows [UI design principles](docs/ui-design-principles.md). They govern presentation and interactions, not simulation semantics.
+
+UI refinement chunk implemented on `ui-workspace`: progressive disclosure, design-principle documentation/agent links, and the human-authorized Recharts → amCharts 5 dependency migration (`package.json` and lockfile included). Main's engine/API files remain untouched. UI testing stays deferred; full M4 remains IN PROGRESS.
+
+### UI preview chunk (parallel worktree)
+
+- [x] Create isolated `ui-workspace` branch/worktree from `a47f34b`; leave M1 work on `main` untouched.
+- [x] Build the responsive workspace, controls, charts, and keyboard-dismissable request side sheet against the frozen types.
+- [x] Use an explicitly labeled, hand-authored four-request M0 walkthrough; do not fabricate paced results.
+- [x] Reveal only completed buckets/earlier requests; support play/pause, speed, restart, scrub, campaign selection, and local list pagination.
+- [x] Keep actual run execution disabled until API wiring; label reset as UI-only.
+- [x] Run typecheck, lint, production build, and an HTTP smoke check.
+- [ ] Connect server run creation/reset/history, fetch request pages/details on demand, and support matched pacing overlays after M1/M2/API readiness.
+- [ ] Human visual review and later UI/playback testing. Per the latest human request, no playback test suite is added in this chunk; prioritize the usable prototype and polish.
+
+These are preview-only completions. The full milestone tasks/gate below remain pending real integration.
 
 Tasks:
 
@@ -259,7 +278,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 
 | Question | Proposed default | Status |
 | --- | --- | --- |
-| Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; Recharts | Confirmed 2026-09-06 |
+| Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3, now cut, see below); Vitest; amCharts 5 | Confirmed 2026-09-06; chart library changed from Recharts to amCharts 5 in the UI branch's refinement chunk, at the human's request |
 | Auction mechanism | Rank by utility (effective bid x quality), not by bid. Quality gates participation; utility decides order | Confirmed 2026-09-06, superseding the original bid-only second-price auction |
 | Pricing rule | Winner pays `clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)`, so better quality buys the same position for less. The alternative, charging the runner-up's raw bid, was rejected: under utility ranking the runner-up can outbid the winner, so it would charge above the winner's own maximum, and capping there would take the whole surplus whenever quality decided the outcome | Confirmed 2026-09-06 |
 | Relevance shape | Per user-campaign pair: user category interest x campaign affinity for the user's segment. Four segments. Chosen because a category-only relevance is common to every candidate in a request and so cancels out of both ranking and price | Confirmed 2026-09-06 |
@@ -267,6 +286,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Engagement definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp to [0,1], then multiply by pair relevance to give quality | Confirmed 2026-09-06 |
 | Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics. Bids span only about 2.7x so quality is not swamped by bid; budgets are calibrated against both modes | Numeric values selected in M2 |
 | Quality-qualified coverage target | At least 90% of requests have two quality-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
+| Persistence | Cut from scope: no database, no Neon/Postgres, no run history. The server keeps only the latest completed result per pacing mode in memory; a new run in a mode replaces its old result, and reset clears both. Detailed in the API branch's M3 rewrite, pending merge | Confirmed 2026-09-06, superseding the earlier Neon-persistence plan |
 | Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
 | Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
 | Database | Neon Postgres, added after the basic simulator works; in-memory store until then | Confirmed 2026-09-06 |
@@ -344,3 +364,46 @@ Remaining blockers / next owner:
 - Results (baseline-3, input hash `921eb4604bdb22a8`): all 32 campaigns deliver at least 95% of budget in both modes, with unspent budget of $1.38 unpaced and $6.94 paced. Quality decides a large share of outcomes: in 67.7% of contested unpaced auctions the winner was outbid by a losing participant, and 41.4% paced. Coverage rose to 98.6%. Revenue is $2,152.76 unpaced against $2,147.20 paced.
 - Known tension: because budgets are now sized to be fully deliverable, the unpaced market exhausts before the session ends and the last hour fills only 129 of 1,168 requests at the reserve price, against 983 at $0.38 paced. Full delivery and a lively unpaced endgame cannot both hold; the human asked for delivery.
 - Commands run and outcomes: `npx vitest run` 49/49 passed; `npm run diagnose` rewrote `docs/m2-diagnostics.md`; `npm run typecheck` OK; `npm run lint` OK.
+
+### M4 UI preview chunk
+
+- Owner: UI assistant; branch `ui-workspace`, worktree `../ads-marketplace-demo-ui`, based on `a47f34b`.
+- Owned paths changed: `src/components/simulator/**`, `src/app/{page.tsx,layout.tsx,globals.css}`, branch-local `README.md` and this plan. No engine, API, contract, dependency/lockfile, or parent infrastructure edits.
+- Implemented: responsive light workspace, empty state, explicit preview load/reset, next-run pacing preference with disabled server execution, bucket playback/scrub/speed, campaign selector, four chart views, cursor-filtered locally paginated requests, native modal side sheet, adjacent educational explanations.
+- Data boundary: four hand-authored unpaced M0 examples with contract-shaped traces/timeline/summary; not simulation evidence. Preview-only aggregation summarizes those recorded examples and does not implement an engine. All four traces are bundled temporarily; production request fetching and comparisons are pending.
+- Validation: `npm ci` succeeded without dependency changes; `npx next typegen`, `npm run typecheck`, `npm run lint`, `npm run build` passed. Initial lint caught an ordinary home anchor; replaced with Next Link and reran successfully. `curl --fail http://127.0.0.1:3012` returned HTTP 200; listener verified on loopback 3012, the existing reserved test port. No browser/playback tests run or added, per human direction.
+- Manual preview server: `npx next start -p 3012 -H 127.0.0.1`; log `/tmp/ads-marketplace-ui-preview.log`. Main's development port 3002 is left free. No permanent port assignment changed.
+- Integration handoff: chart and request sheet consume frozen contract types; replace the isolated preview controller/data source with API loading once ready. Merge README/plan sections carefully because the M1 agent may also update them. Do not mark M4 DONE until real-data integration and the agreed manual gate pass.
+- Commit intent: `feat(ui): add isolated simulator workspace preview`.
+
+### M4 UI principles and progressive-disclosure refinement
+
+- Owner/branch: UI assistant / `ui-workspace`; no changes to main's worktree.
+- Human decisions: document explicit UI design principles for all agents; replace Recharts with amCharts; collapse secondary controls/views; keep formulas and implementation arithmetic optional. Continue to defer UI/playback tests and theme polish.
+- Paths: `docs/ui-design-principles.md`, `AGENTS.md`, README/plan, `src/components/simulator/{simulator-preview,request-sheet,timeline-chart}.tsx`, `src/app/globals.css`, `package.json`, `package-lock.json`, `public/licenses/amcharts5-LICENSE.txt`. Dependency edits specifically authorized by the human's chart-library change.
+- Implemented: one dominant revenue chart; collapsed scenario/settings, campaign chart, competition charts, request list, guide, and candidate arithmetic. amCharts roots mount client-side, update data during playback, and dispose on unmount. Fixed time domain and input-derived value bounds avoid future-result leakage and shifting scales. No engine, API, or comparison semantics changed.
+- Licensing: read the installed amCharts LICENSE; retain default branding and include the original license in public assets. No license key supplied or branding suppression. Review release requirements before hosting publicly.
+- Validation: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed. Refreshed the preview on reserved loopback port 3012; HTTP smoke checks returned 200 for `/` and `/licenses/amcharts5-LICENSE.txt`. `npm ls @amcharts/amcharts5 --depth=0` confirms 5.20.5. No automated UI/playback suite added or run. Human visual review and real-data integration remain pending.
+- Handoff: bring the design-principle document and AGENTS link into main along with the UI branch so all agents receive the rule. Preserve main's newer engine/M2 progress when merging plan/README conflicts. Reinstall dependencies after integration.
+
+### M4 request-funnel presentation
+
+- Owner/branch: UI assistant / `ui-workspace`.
+- Implemented: six connected numbered stages, entrant/survivor counts, bars proportional to retrieved candidates, plain-language attrition, expandable per-stage campaign decisions, threshold versus shortlist exclusions, auction bidders with recorded winner/runner-up, and terminal winner/charge explanation. Auction bids start visible; formulas and candidate arithmetic remain in a separate collapsed section.
+- Trace semantics: use stage `evaluated` flags and recorded decisions, not re-computed scores or budget rules. A campaign excluded earlier never appears as rejected again downstream. Empty stages and no-winner outcomes remain readable; minimum-price pricing is distinguished from runner-up price support.
+- Paths: `src/components/simulator/{request-funnel,request-sheet}.tsx`, `src/app/globals.css`, `docs/ui-design-principles.md`, README, plan. No engine/API/contracts/dependencies changed.
+- Validation: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed. Refreshed the worktree's preview on 127.0.0.1:3012; HTTP smoke check returned 200 and listener was verified. No UI/playback tests added or run.
+- Human review suggestion: load walkthrough, inspect r1 for a multi-bidder auction; advance past 02:00 and inspect r3 for ranking narrowing three campaigns to one and minimum-price billing. The preview does not contain a paced run or all exclusion cases; real-data integration remains pending.
+
+### Integration chunk: merge ui-workspace into main
+
+- Date / task / owner: 2026-09-06 / merge the `ui-workspace` branch into `main` / Claude (coordinating assistant).
+- Paths: merge touched `AGENTS.md`, `README.md`, `IMPLEMENTATION_PLAN.md`, `package.json`, `package-lock.json`, `src/app/{layout,page}.tsx`, `src/app/globals.css`, plus new `docs/ui-design-principles.md`, `public/licenses/amcharts5-LICENSE.txt`, and `src/components/simulator/**`. Also updated in this chunk to reconcile with main's current contract: `src/components/simulator/{preview-data,request-funnel,request-sheet}.tsx`.
+- Why now: `ui-workspace` branched from `a47f34b`, before M1, M2, and the utility-auction rework. It built additive UI (playback, charts, request funnel/side sheet) against contract-shaped types and a hand-authored four-request walkthrough; it never touched `src/lib/**`, so the merge itself was a plain three-way merge with two real conflicts, in `IMPLEMENTATION_PLAN.md` and `README.md` (both branches extended the same narrative sections). `package.json`/`package-lock.json` merged cleanly and correctly adopted `@amcharts/amcharts5`, dropping `recharts`, matching the UI branch's own recorded human decision to switch chart libraries.
+- Real breakage after the text merge, all from contract drift, not from the merge itself: `preview-data.ts` hand-built `CandidateTrace`/`ScenarioSummary` objects against the pre-utility-auction shape (missing `segments`, `RankingStage`, `priceBasis`; `scoring.score` instead of `scoring.quality`). `request-funnel.tsx` and `request-sheet.tsx` read `scoring.shortlisted`/`scoring.rank`/`auction.effectiveBidMicros`/`config.scoreThreshold`, all of which moved or were renamed when ranking became a separate utility stage.
+- Fix, not a patch-over: rather than re-deriving the hand-authored walkthrough numbers a second time by hand, `preview-data.ts` now calls the real `simulate(tinyScenario, false)` and derives everything from its actual output. This is strictly better than hand-authored numbers: it cannot drift from engine behaviour, and it is real engine output rather than a simulated one, even though it is only the four-request tiny fixture rather than the full baseline. The two components were updated to read `ranking.{rank,shortlisted,effectiveBidMicros,utility}` and `scoring.quality`/`config.qualityThreshold`, and their copy now describes the quality gate and utility ranking instead of a bare score threshold.
+- Persistence scope cut (human decision, relayed in this chunk, not separately implemented here): no database, no Neon. The `api-integration` worktree already implements this as an in-memory latest-pair store with no history; that branch is not merged in this chunk. The decisions table and M3 section here are updated to state the cut and point at that branch, without duplicating its detailed rewrite.
+- Commands run and outcomes: `npm install` (added `@amcharts/amcharts5`, removed `recharts`); `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 49/49 passed, unchanged from before the merge; `npm run build` OK (static export, two routes); manual dev-server smoke on `127.0.0.1:3002` returned HTTP 200 and rendered the merged workspace.
+- Decisions / deviations: kept both branches' validation-log history rather than rewriting either; appended this entry after them. Updated the UI's "Try the UI preview" README section and the funnel/sheet copy to describe the current quality/utility mechanic rather than delete it, since the UI itself did not need to change, only its data source and field names.
+- Remaining blockers / next owner: `api-integration` (live-demo API, no persistence) is not yet merged and was built against an older engine commit; it needs the same kind of reconciliation against the current contract before it merges, then the UI's preview data source should be replaced with live API calls. No automated UI/browser tests exist yet, consistent with the project's light-verification preference; only manual review and the checks above were run.
+
