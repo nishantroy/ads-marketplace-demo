@@ -119,6 +119,20 @@ Both runs are computed before step 1 begins; the steps control what is *revealed
 This keeps the pedagogical sequencing (introduce one variable at a time) without reintroducing a decision
 point or a wait.
 
+### Campaign stories in Explore
+
+At the top of Explore, present three compact, fixed **campaign stories** before the general campaign
+selector. They are illustrative examples from the versioned fixture, not “best”/“worst” rankings:
+
+- a strong campaign that spends almost immediately without pacing;
+- a campaign whose paced budget remains available for late auctions;
+- an exception where a lower-tier campaign has a different timing pattern.
+
+Every displayed number must be derived from the paired live timelines—not hand-written copy or an inferred
+causal statistic. Show the same time checkpoint in both modes, plus late-hour activity where relevant.
+A card can select the existing detailed campaign chart and move the shared cursor to its named moment. Do
+not add a grid of all campaigns or claim that every campaign reacts in the same way.
+
 ### Charts: one primary, split secondary comparisons
 
 The primary chart (marketplace revenue/spend) shows both modes as two synced lines on one chart, sharing an

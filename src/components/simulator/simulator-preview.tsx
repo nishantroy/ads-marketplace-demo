@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { ApiError, RequestTrace, RunListResponse, RunRecord, ScenarioResponse, ScenarioSummary, TimelineBucket, TimelineResponse } from "../../lib/contracts";
 import { money, playbackFrame, sessionTime } from "./playback";
 import { RequestSheet } from "./request-sheet";
+import { CampaignStories } from "./campaign-stories";
 
 const TimelineChart = dynamic(() => import("./timeline-chart").then(module => module.TimelineChart), { ssr: false, loading: () => <div className="timeline-chart chart-loading">Loading chart…</div> });
 
@@ -280,6 +281,8 @@ export function SimulatorPreview() {
       </>}
 
       {step === "explore" && <>
+        <CampaignStories campaigns={scenario?.campaigns ?? []} offTimeline={offTimeline} onTimeline={onTimeline}
+          onExplore={(id, hour) => { setSelectedCampaignId(id); seek(hour * 12); }} />
         <Disclosure title="Follow one campaign" description="See how its spend tracks the same budget in each mode.">
           <section className="chart-panel"><div className="section-heading"><div><h3>Campaign spend</h3>
             <select aria-label="Campaign to chart" className="campaign-select" value={campaignId} onChange={event => setSelectedCampaignId(event.target.value)}>

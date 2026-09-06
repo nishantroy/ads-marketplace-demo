@@ -153,10 +153,11 @@ over the identical 4,000-request marketplace automatically, and a five-step guid
 3. **Pacing on** — pacing off freezes as a dashed reference and the pacing-on line animates in from zero
    on the same chart.
 4. **Compare** — both lines shown complete, with a plain-language readout of what changed.
-5. **Explore** — the guide steps back and hands you the instrument panel: play/pause/scrub/speed, **Follow
-   one campaign** for spend against the same budget, **Why do impression prices change?** for
-   competing-campaign-count and clearing-price as paired off/on charts, and **Inspect a request** for a
-   merged request list.
+5. **Explore** — the guide steps back and starts with **Three campaign stories**: a fast early spender,
+   a campaign still active late with pacing, and a useful exception. Each uses live paired values and opens
+   its full campaign curve. Then use play/pause/scrub/speed, **Follow one campaign** for any campaign’s
+   spend against the same budget, **Why do impression prices change?** for competing-campaign-count and
+   clearing-price as paired off/on charts, and **Inspect a request** for a merged request list.
 
 The step pills at the top are always clickable — nothing is gated behind watching a step play out, and you
 can jump to Explore immediately. From Compare onward, one shared cursor scrubs both runs together, so

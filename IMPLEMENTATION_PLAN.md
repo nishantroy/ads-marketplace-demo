@@ -427,6 +427,13 @@ Remaining blockers / next owner:
 - Validation: `npx next typegen`, `npm run typecheck`, `npm run lint`, and `npm run build` passed. Automated UI tests remain deferred by scope decision.
 - Next: human manual flow on port 3002: run off, run on, inspect shared charts at late cursor, open a request funnel, replace a mode, reset. Report UX/polish findings before further changes.
 
+### M4 campaign stories in Explore
+
+- Human direction: make campaign-level pacing differences easy to learn from, without expanding into a 32-campaign dashboard.
+- Implemented: three compact fixture-specific stories before the general campaign selector: `travel-c0` (fast early spender), `electronics-c2` (late paced competitor), and `home-c5` (exception/timing differs). Each uses live paired timeline amounts at a named checkpoint; `electronics-c2` also shows actual final-hour spend. A card selects its existing detailed chart and moves the shared cursor to that checkpoint.
+- Guardrails: cards are labeled examples from the seeded marketplace, not rankings. Values are derived only from recorded on/off timelines; no revenue-direction claim or universal pacing rule is shown. The exception card prevents a misleading “all campaigns burn out early” lesson.
+- Validation: typecheck, lint, and build passed. Manual visual review remains pending.
+
 ### M2 traffic-shape recalibration
 
 - Human direction: make the short-session request stream more even; do not manufacture the expected pacing story through a visual treatment. Keep the six-hour session rather than silently changing its duration.
