@@ -4,15 +4,15 @@
 
 Build a small educational simulator for a non-technical audience showing candidate generation → ranking → auction, and how budget pacing changes campaign spend and marketplace competition over time.
 
-Target: a basic local prototype in approximately 2–3 hours of implementation, not a production-ready application. Use TypeScript, Next.js, and Postgres. Eventual Vercel hosting should remain possible, but deployment, authentication, workers, WebSockets, real ad integrations, and simulated clicks/conversions are out of scope.
+Target: a basic local prototype in approximately 2–3 hours of implementation, not a production-ready application. Use TypeScript and Next.js. Latest human scope reduction: this is a live demo, with no database, durable persistence, run history, or historical request browser. Deployment, authentication, workers, WebSockets, real ad integrations, and simulated clicks/conversions remain out of scope.
 
-Compute a whole run server-side, persist it, then animate a lightweight timeline in the browser. Store every request trace; fetch details on demand. Do not implement an HTTP call or database write per simulated impression.
+Compute a whole run server-side and retain only the latest pacing-on and pacing-off outputs in memory, then animate a lightweight timeline in the browser. Current-pair traces remain available on demand for the funnel lesson. A new run replaces that mode's result; reset clears both. No simulation or accounting is performed by browser playback.
 
 ### Scope decisions (confirmed 2026-09-06)
 
 - Verification load is deliberately light for the prototype: focused unit tests written alongside code, plus manual human testing. Real-database integration tests, Playwright/browser automation, rollback-on-failure tests, and similar hardening are deferred follow-ups, listed under "Deferred productionization" below.
-- Work lanes run sequentially with a single implementer; the parallel-lane boundaries below remain as path ownership guidance only.
-- Get the basic simulator working end to end before wiring persistence. Postgres is provided by Neon (serverless Postgres compatible with Vercel), not a local Docker container. Until M3, runs live in an in-memory server-side store behind a small repository interface so Neon can replace it without touching the engine or UI.
+- Latest human direction: engine work continues on main, UI lives on `ui-workspace`, and the API/in-memory repository lane runs on `api-integration` in `../ads-marketplace-demo-api`. No cross-worktree edits. The API branch starts at committed main `6c6888e`; uncommitted contract/engine changes on main are an integration dependency, not copied into this branch.
+- Superseded by latest human direction: no persistence implementation or database abstraction is needed. Keep only two live result slots in one local server process. Restart loses both results. Neon, historical snapshots, and history browsing are removed from the current scope.
 - Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
 - Ranking order within a category is intentionally static across requests (score is a per-campaign constant times a per-user relevance shared by every candidate in the request). This is enough to demonstrate the funnel; per-user or per-campaign signals are not being added.
 - Pacing keeps the simple spend-versus-target probability. Because second-price charges sit below bid, the probability is fractional only inside a one-bid-wide band and behaves almost binarily. A later option, sequenced only if needed, is to make probability also depend on the fraction of total budget already spent.
@@ -26,13 +26,13 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
 | M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | DONE | Claude (coordinating assistant) | Generator with baseline and small presets, budgets calibrated for full delivery (`baseline-2`); `docs/m2-diagnostics.md` committed; 44 tests, typecheck and lint pass |
-| M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
+| M3 | Live-demo API and latest on/off result pair | M0; final integration M1/M2 | IN PROGRESS | API assistant (`api-integration`) | API chunk passes 6 focused tests, typecheck/lint/build, and paired 4,000-request HTTP smoke against committed main `6c6888e`. Pending engine-contract/UI integration; no DB/history. |
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
 ### Work lane boundaries
 
-Lanes run sequentially (confirmed). After M0 freezes shared types and response examples, path ownership is:
+Latest human direction authorizes parallel isolated worktrees. API assistant owns `src/app/api/**`, `src/lib/server/**`, and branch-local README/plan/API documentation. No UI, shared-contract, engine, or dependency edits. Existing lane guidance:
 
 - Engine lane: `src/lib/simulation/**`, engine tests; owns M1 then M2.
 - Persistence lane: `src/lib/db/**`, migrations, `src/app/api/**`, API tests; owns M3. Use a tiny contract fixture until the engine is available.
@@ -162,21 +162,11 @@ Report: score-qualified request coverage, filled requests, multiple-bidder aucti
 
 Gate: accounting invariants pass for both modes; the report demonstrates understandable spend-pattern differences and assesses late competition. If it does not illustrate the intended lesson, discuss fixture tuning with the human before UI polish. Higher paced revenue is not a correctness assertion. Confirm an explicit coverage target with the human rather than treating “majority” as an unstated numeric requirement.
 
-## M3 — Persistence and APIs
+## M3 — Live-demo API (revised scope)
 
-Sequencing: an in-memory run store behind a repository interface is used from M1 onward so the UI can be exercised before any database exists. M3 replaces that store with Neon Postgres (Drizzle + node-postgres, `DATABASE_URL` from an ignored `.env.local`; a committed `.env.example` shows the shape). No local Docker Postgres is planned.
+Latest human decision removes persistence and run history. One immutable active scenario and at most two result slots live in server memory: latest pacing off, latest pacing on. Each result contains its input hash, scenario/engine versions, summary, timeline, and traces. Creating another run in a mode replaces its previous result; old IDs return 404. Reset regenerates the baseline and clears both slots. Restart also clears them. These are local single-process semantics, not serverless durability.
 
-Proposed minimal schema:
-
-| Table | Stored data |
-| --- | --- |
-| `scenarios` | Immutable version, seed, config, campaign/user JSONB; active default selection |
-| `requests` | Scenario ID, request ID, timestamp/order, user/category/query |
-| `runs` | Input snapshot/hash, immutable request reference, engine version, pacing mode, status, summary |
-| `request_results` | Run/request IDs, winner, price, full trace JSONB |
-| `run_buckets` | Five-minute marketplace and per-campaign metrics |
-
-Index request ordering and run/request lookup. Enforce uniqueness of run/request results. Preserve historical input references when defaults change.
+No tables, migrations, general repository interface, history selector, retention policy, or failed-run archive. A failed computation leaves the previous successful pair untouched. Publish a completed result only after the full engine output and invariants are available.
 
 Endpoints:
 
@@ -193,22 +183,23 @@ GET  /api/runs/:id/requests/:requestId
 
 Tasks:
 
-- [ ] Add schema/migrations and idempotent default seeding.
-- [ ] Validate inputs and return consistent errors and not-found responses.
-- [ ] Load immutable input, compute on the server, and batch-save outputs transactionally.
-- [ ] Mark a run completed only after all outputs are durable; represent running/failed states honestly.
-- [ ] Disable duplicate submission in the UI; avoid adding a job/idempotency framework unless a demonstrated need is discussed.
-- [ ] Reset restores/activates baseline defaults without changing historical runs. Starting a run always resets balances independently of this action.
-- [ ] Retrieve timelines separately from paginated request lists and detailed traces.
+- [x] Seed the active baseline lazily; keep fresh balances per run.
+- [x] Validate mode/pagination inputs and return consistent JSON errors with no-store caching.
+- [x] Compute using the committed engine behind one adapter; publish completed results into the mode's slot.
+- [x] Preserve the previous successful pair on failure; do not retain failed runs or partial outputs.
+- [x] Reset clears both results and restores baseline defaults.
+- [x] Retrieve current timelines separately from paginated current requests and individual traces.
+- [x] Run focused unit checks and an actual 4,000-request paired API smoke check.
+- [ ] Integrate the other agent's pending contract/engine changes and connect the UI's live pair; prevent duplicate submission in that UI lane.
 
-Gate (prototype): unit tests for input validation and the repository interface; manual check that a run can be created, reloaded after a server restart, and reset preserves historical runs. Run the complete 4,000-request engine through the API and record runtime/output size. Real-database integration tests and rollback-on-failure coverage are deferred (see "Deferred productionization").
+Gate (prototype): focused live-state/input-validation tests, typecheck/lint/build, and HTTP smoke flow for the real baseline. No database or browser test suite. Final M3 integration stays pending until the active engine and UI branches agree.
 
 ## M4 — Playback workspace and request inspection
 
 Tasks:
 
 - [ ] Add pacing toggle, run button, computation status, and reset-defaults button.
-- [ ] Load the latest results and provide a minimal selector for persisted runs.
+- [ ] Load the latest pacing-on/off pair; no run-history selector. Refresh the pair after a mode is replaced or reset.
 - [ ] Add play/pause, speed, restart, and six-hour simulated clock; no simulation logic in the browser.
 - [ ] Chart marketplace cumulative revenue and per-campaign spend versus target.
 - [ ] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
@@ -227,7 +218,7 @@ Tasks:
 
 - [ ] Add short in-context tooltips and a demo guide: run without pacing, inspect early/late behavior, run with pacing, compare matched runs, inspect supporting auctions.
 - [ ] Explain session budgets, threshold-only relevance effect, per-impression billing, losing-bid price support, and non-guaranteed revenue improvement.
-- [ ] Run the full local flow: seed → unpaced run → paced run → playback → request inspection → reload → reset → reopen historical run.
+- [ ] Run the full local flow: seed → unpaced run → paced run → comparison playback → current request inspection → replace one mode → reset both results.
 - [ ] Verify paired inputs match, all accounting invariants hold, and timelines reconcile with traces.
 - [ ] Document setup, migrations, reset behavior, test commands, known limits, and actual diagnostic observations in README.
 - [ ] Record checks, remaining limitations, and local commit handoff.
@@ -236,7 +227,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 
 ## Deferred productionization (follow-ups, not in this build)
 
-- Real Postgres integration tests: seed repeatability, run reload, reset preservation, rollback on persistence failure.
+- Database persistence and history are outside the current live-demo scope, not prerequisites.
 - Playwright/browser automation for playback controls and error/empty states.
 - Job/idempotency handling for run submission; hosting-limit assessment for synchronous run computation on Vercel.
 - Optional pacing refinement: probability that also accounts for the fraction of total budget spent.
@@ -251,8 +242,8 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
 | Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
 | Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
-| Database | Neon Postgres, added after the basic simulator works; in-memory store until then | Confirmed 2026-09-06 |
-| Reset/history | Reset re-seeds the baseline scenario if missing and marks it active; retain immutable historical runs | Confirmed 2026-09-06 |
+| Database | None; local server memory holds the latest on/off results only | Latest human scope reduction supersedes Neon plan |
+| Reset/history | Regenerate baseline and clear both result slots; no history retained | Latest human scope reduction |
 
 Do not quietly substitute a different ranking/pacing/auction mechanism to make the plots look better. Surface ambiguous or conflicting outcomes and agree on changes.
 
@@ -315,3 +306,14 @@ Remaining blockers / next owner:
 - Result (baseline-2, input hash `5de9b9537dcce8b2`): campaigns delivering at least 95% of budget are 30 of 32 unpaced and 31 of 32 paced, both above the 90% target. Unspent budget fell from $281.80 to $23.59 unpaced and from $423.77 to $5.79 paced. Revenue is now nearly equal across modes, $2,129.98 unpaced against $2,147.78 paced, which is expected once both modes spend nearly every budget. Unpaced fill is 74.7% against 90.1% paced: the unpaced market now visibly burns out, filling 357 of the last hour's 1,168 requests against 984 paced, and the last-hour price is $0.23 against $0.39.
 - Decisions / deviations: the diagnostics report now leads with spend-share delivery at the 95% and 99% bars and labels the reserve-based count as knife-edge. The M2 gate asserts at least 90% delivery in both modes. An earlier gate assertion that unpaced fill exceeds 80% was removed, because burn-out is now the intended unpaced behaviour. Scenario versions bumped to `baseline-2` and `small-2`.
 - Commands run and outcomes: `npx vitest run` 44/44 passed; `npm run diagnose` rewrote `docs/m2-diagnostics.md`; `npm run typecheck` OK; `npm run lint` OK.
+
+### M3 live-demo API chunk
+
+- Owner/branch/worktree: API assistant / `api-integration` / `../ads-marketplace-demo-api`, branched from committed main `6c6888e`.
+- Scope change during implementation: human removed persistence/history. The initial repository abstraction was discarded before commit. Final implementation holds one immutable active scenario and only the latest completed result for each pacing mode. No Neon, migrations, database abstraction, failed-run archive, history browser, or historical request access.
+- Owned paths: `src/app/api/**`, `src/lib/server/**`, `docs/live-demo-api.md`, README, plan. No UI, engine, shared-contract, dependency, environment, or parent infrastructure edits.
+- Implementation: seven route files using existing response shapes; mode validation, compact bounded request pagination with exclusive playback cutoff, no-store JSON/error responses, server-only runtime store shared across routes, and a single engine adapter. New same-mode result invalidates its old ID; reset clears both. Failed computation keeps the previous successful pair unchanged.
+- Checks: `npm ci` (no lockfile changes), `npx next typegen`, `npm run typecheck`, `npm run lint`, `npx vitest run src/lib/server/live-demo.test.ts` (6/6), `npm run build`, and `git diff --check` passed. No full engine-suite rerun, database tests, or UI tests claimed.
+- HTTP smoke: launched the production API temporarily on its existing configured loopback port 3002 after checking listeners; exercised scenario, real off/on creation, summaries/timelines, cross-route shared state, pagination, current trace, cutoff zero, invalid inputs, same-mode replacement with identical summary, old-ID 404s, and reset. All passed. Off run + timeline fetch took 0.203s (4,286-byte run response / 298,518-byte timeline); on took 0.185s (4,216 / 309,275 bytes). Both have 4,000 requests, 72 buckets, matching input hash/engine version, and reconciled campaign spend/revenue. Revenues were $2,129.98 off / $2,147.78 on for the committed baseline. These timings include local HTTP work and are not engine-only benchmarks.
+- Server lifecycle: API smoke process stopped in a finally block; UI preview on 3012 left untouched. No additional port assigned.
+- Handoff: main has in-progress contract/engine changes, including candidate trace fields. Reconcile those commits before integrating this API and `ui-workspace`; the adapter isolates engine imports. Preserve each lane's README/plan additions on merge. Update the UI to consume the current pair, handle stale-ID 404s, and reset both comparison views. No cross-origin UI bridge added. Single-process memory is intentionally not durable or multi-user/serverless-ready.

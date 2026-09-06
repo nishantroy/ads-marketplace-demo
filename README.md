@@ -6,6 +6,7 @@ second-price auctions, and budget pacing over a replayable six-hour session.
 - [Implementation plan and progress](IMPLEMENTATION_PLAN.md)
 - [Engine specification](docs/engine-spec.md)
 - [Project agent rules](AGENTS.md)
+- [Live-demo API](docs/live-demo-api.md)
 
 ## Local setup
 
@@ -22,8 +23,10 @@ npm run lint
 
 From the parent directory, `make run-ads-marketplace-demo` starts the app on its registered port.
 
-Persistence (Neon Postgres) arrives in milestone M3; until then runs are held in server memory. Copy
-`.env.example` to `.env.local` and fill in `DATABASE_URL` once M3 lands.
+The latest scope is a **live demo with no database or run history**. Server memory holds only the
+latest pacing-on and pacing-off results. No `DATABASE_URL` is needed; the earlier Neon environment
+example is unused. Re-running a mode replaces its result, reset clears both, and server restart loses
+both. Only the current pair's requests are available for funnel drill-down.
 
 ## How it works
 
@@ -115,9 +118,26 @@ Pacing does throttle the strong bidders, and it does leave room for cheaper ones
 the two strongest tiers are held out of roughly 80% of the auctions they are evaluated for, and the cheapest
 tier wins 183 auctions it would otherwise never see.
 
-What exists today (after M2): the shared types, the pure engine, the seeded marketplace generator with both
-presets, the paired-run diagnostics, and the invariant checker, all covered by unit tests. The API and the
-playback UI arrive in later milestones.
+On `api-integration`, the existing engine and fixtures now sit behind a working live-demo API:
+
+1. `GET /api/scenario` lazily loads the baseline summary.
+2. `POST /api/runs` with `{ "pacingEnabled": false }` or `true` executes the real engine server-side,
+   checks invariants, and replaces only that mode's result. Failed runs leave the existing pair intact.
+3. `GET /api/runs` returns zero to two current results, not history. Compare matching input hashes and
+   engine versions; IDs and wall-clock metadata do not affect simulation output.
+4. Fetch `/api/runs/:id/timeline` for playback, `/requests?limit=50&beforeMs=...` for compact current
+   request rows, and `/requests/:requestId` for a single funnel trace.
+5. `POST /api/scenario/reset` regenerates defaults and clears both results. Replaced/reset IDs return 404.
+
+See [Live-demo API](docs/live-demo-api.md) for response semantics, paging, and curl examples.
+The store is local, single-process, and not suitable for multi-instance/serverless persistence.
+
+This API worktree branches from committed main `6c6888e`. The other agent's uncommitted engine/contracts
+are not included or modified. UI work remains separate on `ui-workspace`; no pages, charts, or UI state
+were changed here. Integrate the branches before wiring same-origin UI requests.
+
+Focused API checks: `npx vitest run src/lib/server/live-demo.test.ts` (six tests). Typecheck, lint,
+production build, and a real paired-baseline HTTP smoke flow also pass; UI tests remain deferred.
 
 ## Layout
 
@@ -125,5 +145,7 @@ playback UI arrive in later milestones.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
 - `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
 - `src/app/` Next.js app router pages and API routes.
+- `src/lib/server/` two-slot live state, API service, input validation, and a single engine adapter.
 
-Status: M2 complete (seeded marketplace and paired-run diagnostics). API and playback UI follow.
+Status: live-demo API chunk implemented; integration with main's pending engine changes and the UI
+worktree remains. Database persistence and historical browsing are out of scope.
