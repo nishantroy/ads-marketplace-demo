@@ -4,29 +4,28 @@ Applies throughout this repository, in addition to `../AGENTS.md`.
 
 ## Scope and decisions
 
-- Read `IMPLEMENTATION_PLAN.md` before starting. Treat its simulation contract and milestone gates as the source of truth.
-- For any UI work, also read and follow `docs/ui-design-principles.md`. These are UI design principles: lead with the learning journey, reveal implementation details on demand, and keep the overview uncluttered. Use amCharts 5 for time-series charts; preserve its branding unless appropriately licensed.
+- Read `README.md` before starting. Its "How the app works" and "The simulation engine" sections are the source of truth for the simulation contract and the app's data flow; there is no separate plan or spec document.
+- For any UI work, follow the README's "Design principles" section: lead with the learning journey, reveal implementation details on demand, keep the overview uncluttered, compare modes fairly, and never imply pacing must win. Use amCharts 5 for time-series charts; preserve its branding unless appropriately licensed.
 - Ask the human before crossing an undefined product boundary, changing simulation semantics, making an uncertain architectural choice, adding infrastructure, or expanding scope. Explain the ambiguity, recommend the smallest option, and state what it affects.
-- Do not block on routine implementation details already covered by the contract. Record consequential decisions in the plan.
+- Do not block on routine implementation details already covered by the contract. Record consequential decisions in the README section they affect.
 - Do not add features, dependencies, or abstractions merely for hypothetical future needs. Local prototype first; production deployment is not part of this build.
 - Preserve the educational distinctions: ranking is utility (bid times quality), not bid alone; quality gates participation while utility decides order; better quality buys the same position for less; all billing is per impression; only eligible auction participants support prices; and pacing does not guarantee more revenue.
 
 ## Incremental delivery
 
-- Work in small, independently testable chunks. Pass the relevant milestone gate before dependent integration work. Deliver one chunk (typically one milestone) per turn, commit it, then stop and report so the human can test before the next chunk starts; do not chain milestones in one go.
+- Work in small, independently testable chunks. Deliver one logical chunk per turn, commit it, then stop and report so the human can test before the next chunk starts; do not chain several chunks in one go.
 - Keep `README.md` current in the same chunk as the code: it must explain how the app works at that point (funnel, data flow, what exists so far), not only setup commands.
-- Update the plan's task status, validation evidence, decisions, and handoff notes in the same chunk as implementation.
 - Run focused checks and report exact commands and outcomes. Never claim unrun checks passed. Mark blocked or unavailable checks explicitly.
 - Commit completed, validated logical chunks locally with descriptive messages. Do not wait until the entire app is finished. Never push without human authorization.
 - Inspect `git status` and the staged diff before committing. Stage explicit paths; never sweep in another contributor's work, secrets, or generated artifacts. Do not amend, reset, or discard others' commits or changes.
 
 ## Parallel work
 
-- Claim a task and its owned paths in the plan before editing. A coordinating agent assigns ownership and resolves overlapping work.
-- Prefer separate worktrees for concurrent implementation. Sub-agents report their branch/commit, changed paths, checks, and unresolved issues to the coordinator; the coordinator updates the canonical progress table.
+- Agree on task ownership and owned paths before editing. A coordinating agent assigns ownership and resolves overlapping work.
+- Prefer separate worktrees for concurrent implementation. Sub-agents report their branch/commit, changed paths, checks, and unresolved issues to the coordinator.
 - Agree on shared TypeScript contracts first. Changes to shared types, schema, package dependencies/lockfile, configuration, or API semantics require coordination before editing.
 - In a shared checkout, only the coordinator performs Git staging/commits; workers must not commit or modify files owned by another worker.
-- Do not mark a milestone complete merely because isolated work is complete: its integration gate must pass.
+- Do not call a chunk complete merely because isolated work is complete: it must pass typecheck, lint, tests, and build once integrated.
 
 ## Engineering boundaries
 
