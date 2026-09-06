@@ -42,9 +42,33 @@ everything, so the browser can play the result back without recomputing anything
 
 Exact formulas, bounds and tie-breaking rules are in [docs/engine-spec.md](docs/engine-spec.md).
 
-What exists today (after M0): the shared types, the score formulas, the stable hash used for pacing draws,
-snapshot validation, and a tiny hand-calculable fixture with unit tests. The engine loop, seeded
-marketplace, API, and playback UI arrive in later milestones.
+### Using the engine
+
+`simulate(snapshot, pacingEnabled)` in `src/lib/simulation/engine.ts` is the whole simulation. It is pure:
+no I/O, no clock, no randomness beyond a hash keyed by request and campaign, so the same snapshot and mode
+always give the same output. It returns a run summary, 72 timeline buckets, and one trace per request.
+
+```ts
+import { simulate } from "@/lib/simulation/engine";
+import { checkInvariants } from "@/lib/simulation/invariants";
+import { tinyScenario } from "@/lib/fixtures/tiny";
+
+const run = simulate(tinyScenario, /* pacingEnabled */ false);
+run.summary.revenueMicros;          // total revenue, in microdollars
+run.timeline[71].cumulativeRevenueMicros;
+run.traces[0].candidates;           // every retrieved campaign and why it was excluded
+checkInvariants(tinyScenario, run); // [] when the run is self-consistent
+```
+
+Each candidate in a trace records the stage that stopped it (`excluded_budget`, `excluded_pacing`,
+`excluded_threshold`, `excluded_shortlist`, `excluded_reserve`, `lost`, or `won`), and stages after that
+point are marked not evaluated rather than failed. That distinction is what the request side sheet will
+show. `checkInvariants` is the shared accounting check: revenue equals total campaign spend and the sum of
+clearing prices, no campaign overspends, one winner at most per request, and buckets reconcile with traces.
+
+What exists today (after M1): the shared types, the pure engine and its stage functions, the timeline
+builder, the invariant checker, and a tiny hand-calculable fixture with unit tests. The seeded six-hour
+marketplace, the API, and the playback UI arrive in later milestones.
 
 ## Layout
 
@@ -53,4 +77,4 @@ marketplace, API, and playback UI arrive in later milestones.
 - `src/lib/fixtures/` hand-calculable tiny scenario used by unit tests.
 - `src/app/` Next.js app router pages and API routes.
 
-Status: M0 complete (scaffold and frozen contracts). Engine, seeded marketplace, API, and playback UI follow.
+Status: M1 complete (pure engine and unit tests). Seeded marketplace, API, and playback UI follow.

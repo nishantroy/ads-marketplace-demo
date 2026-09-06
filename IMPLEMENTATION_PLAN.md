@@ -24,7 +24,7 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | ID | Milestone | Depends on | Status | Owner | Evidence / handoff |
 | --- | --- | --- | --- | --- | --- |
 | M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
-| M1 | Pure engine and unit tests | M0 | TODO | Unassigned | — |
+| M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | TODO | Unassigned | — |
 | M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
@@ -129,21 +129,21 @@ Gate: typecheck and a smoke unit test pass; local setup commands are documented;
 
 Tasks:
 
-- [ ] Implement `simulate(scenarioSnapshot, pacingEnabled)` with no I/O and an in-memory campaign balance map.
-- [ ] Implement retrieval, eligibility, pacing, scoring/shortlist, auction, and accounting as testable functions.
-- [ ] Produce request traces, five-minute buckets, and run summary.
-- [ ] Capture candidate exclusion reasons, budget before/after, target, probability, random draw, score components, shortlist, effective bids, winner, runner-up, and price.
-- [ ] Distinguish not-evaluated downstream stages from rejected stages in traces.
+- [x] Implement `simulate(scenarioSnapshot, pacingEnabled)` with no I/O and an in-memory campaign balance map.
+- [x] Implement retrieval, eligibility, pacing, scoring/shortlist, auction, and accounting as testable functions.
+- [x] Produce request traces, five-minute buckets, and run summary.
+- [x] Capture candidate exclusion reasons, budget before/after, target, probability, random draw, score components, shortlist, effective bids, winner, runner-up, and price.
+- [x] Distinguish not-evaluated downstream stages from rejected stages in traces.
 
 Required tests:
 
-- [ ] Repeat execution yields identical results for the same inputs and mode.
-- [ ] Hand-calculated one-bidder, multi-bidder, tied-bid, and empty-auction cases.
-- [ ] Paced-out, below-threshold, and budget-ineligible candidates cannot set prices or win.
-- [ ] Remaining budget caps effective bids; winner price never exceeds effective bid.
-- [ ] Time zero, same-timestamp ordering, session boundary, and pacing probability limits.
-- [ ] Revenue equals total campaign spend and sum of request prices; no overspend; at most one winner per request.
-- [ ] Buckets reconcile with request events and final summaries.
+- [x] Repeat execution yields identical results for the same inputs and mode.
+- [x] Hand-calculated one-bidder, multi-bidder, tied-bid, and empty-auction cases.
+- [x] Paced-out, below-threshold, and budget-ineligible candidates cannot set prices or win.
+- [x] Remaining budget caps effective bids; winner price never exceeds effective bid.
+- [x] Time zero, same-timestamp ordering, session boundary, and pacing probability limits.
+- [x] Revenue equals total campaign spend and sum of request prices; no overspend; at most one winner per request.
+- [x] Buckets reconcile with request events and final summaries.
 
 Gate: engine tests and typecheck pass on the tiny fixture. No React/database dependency enters the engine.
 
@@ -285,3 +285,12 @@ Remaining blockers / next owner:
 - Commands run and outcomes: `npm install` (Next 16.3.4, React 19.2.8, Recharts 3.10, Vitest 5.0, `@types/node` bumped to 24 for Vitest peer range); `npx next typegen` OK; `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 4/4 passed; `npm run dev` served HTTP 200 on 127.0.0.1:3002 and was stopped.
 - Decisions / deviations: Google Fonts removed from the scaffold layout to avoid a network dependency at build time. Objective bases, stable hash, request ordering, and tie-breaking are frozen in `docs/engine-spec.md`. `thresholdQualifiedCount` is recorded per request as a diagnostic (score-only, before budget/pacing) so M2 can separate threshold qualification from attrition without changing the funnel.
 - Remaining blockers / next owner: none. Next is M1 (pure engine), same implementer.
+
+### M1 chunk
+
+- Date / task / owner: 2026-09-06 / M1 pure deterministic engine / Claude (coordinating assistant).
+- Paths: `src/lib/simulation/{engine,pacing,auction,timeline,invariants}.ts`, `src/lib/simulation/engine.test.ts`, `README.md`, `IMPLEMENTATION_PLAN.md`.
+- Commands run and outcomes: `npx vitest run` 24/24 passed across 2 files; `npm run typecheck` OK; `npm run lint` OK.
+- Observed simulation results: the tiny fixture unpaced yields revenue $2.20, split c1 $0.90 and c3 $1.30 with c2 at $0, matching the hand calculation in `src/lib/fixtures/tiny.ts`. Paced mode on the same fixture leaves the first request unfilled because every target is 0 at t = 0. `checkInvariants` returns no violations in either mode.
+- Decisions / deviations: added `src/lib/simulation/invariants.ts` so M2 diagnostics and the API reuse one accounting check instead of re-deriving it. Timeline buckets carry a per-campaign linear target in both modes so the unpaced chart can still show the reference line. A test asserts no engine file imports React, Next, `pg`, or Drizzle and that none call `Date.now`, `new Date`, or `Math.random`. No test asserts that pacing raises or lowers revenue.
+- Remaining blockers / next owner: none. Next is M2 (seeded six-hour marketplace and paired-run diagnostics), same implementer.
