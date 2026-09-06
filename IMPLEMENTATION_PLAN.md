@@ -31,6 +31,17 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant | Live API wiring complete: current on/off pair, shared-cursor overlays, current request rows/traces, reset/replacement/error states. Manual end-to-end review and polish remain. |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
+### Deferred code-review follow-up
+
+Human direction: finish design polish first, then address the [code-review checklist](docs/code-review-follow-up.md).
+The review covers correctness, quality, validation gaps, and optional simplifications; it is not authorization
+to change simulation semantics. Recheck findings against the polished UI before implementing fixes.
+
+Documentation task owner: coordinating assistant; owned paths are `docs/code-review-follow-up.md`,
+`README.md`, and this plan only. No application fixes are included. Validation for this documentation
+chunk: Markdown link/fence checks and `git diff --check`; application validation evidence is retained in
+the review document from the preceding review, not claimed as newly run here.
+
 ### Work lane boundaries
 
 M1 and UI now run in separate worktrees per the latest human request. UI owns `src/components/simulator/**`, app page/layout/styles, and branch-local README/plan updates. It will not edit shared contracts, package files, or the other agent's working tree. After M0 freezes shared types, path ownership is:

@@ -8,6 +8,7 @@ quality-adjusted second-price auctions, and budget pacing over a replayable six-
 - [Project agent rules](AGENTS.md)
 - [UI design principles](docs/ui-design-principles.md)
 - [Live-demo API](docs/live-demo-api.md)
+- [Code-review follow-up — deferred until after design polish](docs/code-review-follow-up.md)
 
 ## Local setup
 
