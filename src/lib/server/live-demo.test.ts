@@ -45,8 +45,7 @@ describe("stateless, recomputable live demo", () => {
     expect(service.requests("off", { cursor: page.nextCursor!, limit: 1, beforeMs: 7_200_000 }).items[0].requestId).toBe("r2");
     expect(service.requests("off", { cursor: 0, limit: 10, beforeMs: 0 }).total).toBe(0);
     const trace = service.trace("off", "r1").trace;
-    trace.candidates.length = 0;
-    expect(service.trace("off", "r1").trace.candidates.length).toBe(3);
+    expect(trace.candidates).toHaveLength(3);
   });
 
   it("falls back to this instance's previous result when a recompute fails", () => {

@@ -87,8 +87,9 @@ baselineScenario()  ──►  simulate(snapshot, pacingEnabled)  ──►  { s
   reconcile with traces.
 - **API** (`src/lib/server/`, `src/app/api/`): stateless. There are exactly two results, `off` and `on`,
   and any server instance recomputes either on demand from the fixed scenario; a per-instance cache only
-  saves the recompute. That is what makes it safe on Vercel, where instances share no memory — a cache miss
-  is never an error.
+  saves the recompute. The store owns those cache references and avoids deep-copying the 4,000-request
+  scenario or full traces on each internal lookup; HTTP JSON serialization remains the caller boundary.
+  That is what makes it safe on Vercel, where instances share no memory — a cache miss is never an error.
 - **UI** (`src/components/simulator/`): a single client component sequences the scenes and reveals
   server-recorded results through a playback cursor. Playback speed is fixed and cannot affect outcomes.
 

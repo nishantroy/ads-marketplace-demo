@@ -15,29 +15,30 @@ interface DemoResult { run: RunRecord; output: RunOutput }
  * second) function of the fixed baseline scenario and a pacing mode, so any instance can always recompute
  * a result from nothing: this class only avoids recomputing when the same instance already has. On a
  * platform that runs multiple instances with no shared memory (Vercel serverless included), a cache miss
- * must never be an error — see SimulatorService.ensureRun.
+ * must never be an error — see SimulatorService.ensureRun. The store owns its scenario and cached outputs:
+ * service code and the pure engine must treat those references as immutable. HTTP serialization creates the
+ * caller's copy, so cloning a 4,000-request scenario or full output on every internal cache access is wasteful.
  */
 export class LiveDemoStore {
   private scenario?: ScenarioSnapshot;
   private results = new Map<boolean, DemoResult>();
 
   getScenario(create: () => ScenarioSnapshot) {
-    this.scenario ??= structuredClone(create());
-    return structuredClone(this.scenario);
+    this.scenario ??= create();
+    return this.scenario;
   }
 
   reset(snapshot: ScenarioSnapshot) {
-    this.scenario = structuredClone(snapshot);
+    this.scenario = snapshot;
     this.results.clear();
   }
 
   getCached(pacingEnabled: boolean): DemoResult | undefined {
-    const cached = this.results.get(pacingEnabled);
-    return cached ? structuredClone(cached) : undefined;
+    return this.results.get(pacingEnabled);
   }
 
   cache(run: RunRecord, output: RunOutput) {
-    this.results.set(run.pacingEnabled, structuredClone({ run, output }));
+    this.results.set(run.pacingEnabled, { run, output });
   }
 
   listRequests(output: RunOutput, id: string, query: RequestQuery) {
