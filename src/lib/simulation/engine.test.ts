@@ -57,12 +57,48 @@ describe("engine determinism and purity", () => {
     expect(paced).not.toEqual(a);
   });
 
-  it("does not leave the engine depending on React, a database, HTTP, or the wall clock", () => {
+  // Guard for the determinism rules in AGENTS.md. Add a pattern here whenever a rule is added there.
+  it("keeps banned non-deterministic sources out of the engine", () => {
+    const banned: Array<[string, RegExp]> = [
+      ["Math.random", /\bMath\.random\b/],
+      ["crypto.getRandomValues", /\bgetRandomValues\b/],
+      ["Date.now", /\bDate\.now\b/],
+      ["new Date", /\bnew Date\b/],
+      ["performance.now", /\bperformance\.now\b/],
+      ["process.env", /\bprocess\.env\b/],
+      ["setTimeout", /\bsetTimeout\b/],
+      ["a React, Next, or database import", /from\s+["'](react|next|pg|drizzle)/],
+    ];
     const dir = path.join(process.cwd(), "src/lib/simulation");
-    const forbidden = /(from\s+"(react|next|pg|drizzle)|Date\.now|new Date\(|Math\.random)/;
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))) {
-      expect(readFileSync(path.join(dir, file), "utf8"), file).not.toMatch(forbidden);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const source = readFileSync(path.join(dir, file), "utf8");
+      for (const [label, pattern] of banned) {
+        expect(source, `${file} must not use ${label}`).not.toMatch(pattern);
+      }
     }
+  });
+
+  it("gives every request-time draw its own key so results never depend on evaluation order", () => {
+    const scenario = scenarioWith({
+      campaigns: [impressionCampaign("c1", 1, 5), impressionCampaign("c2", 1, 5)],
+      requests: [
+        { id: "r1", timestampMs: HOUR, userId: "u1", category: "shoes" },
+        { id: "r2", timestampMs: 2 * HOUR, userId: "u1", category: "shoes" },
+      ],
+    });
+    const draws = simulate(scenario, true).traces.flatMap((trace) =>
+      trace.candidates.map((c) => (c.pacing.evaluated ? c.pacing.draw : null)),
+    );
+    expect(draws.every((d) => d !== null)).toBe(true);
+    expect(new Set(draws).size).toBe(draws.length);
+
+    // Reversing the campaign order changes nothing: each draw is keyed by request and campaign.
+    const reversed = { ...scenario, campaigns: [...scenario.campaigns].reverse() };
+    const byId = (output: ReturnType<typeof simulate>) =>
+      output.traces.map((t) => [...t.candidates].sort((a, b) => a.campaignId.localeCompare(b.campaignId)));
+    expect(byId(simulate(reversed, true))).toEqual(byId(simulate(scenario, true)));
   });
 });
 
