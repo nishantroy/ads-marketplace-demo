@@ -7,7 +7,11 @@ import { money, sessionTime } from "./playback";
 
 export interface ChartPoint { time: number; value: number | null; target?: number; }
 
-export function TimelineChart({ points, comparisonPoints, durationMs, label, comparisonLabel, monetary = true, target = false, maxValue, cumulative = false }: {
+/** Pacing off reads as the cautionary line (it can burn out and go quiet); pacing on reads as the healthy one. */
+export const OFF_COLOR = 0x9c3b2e;
+export const ON_COLOR = 0x2f7d5c;
+
+export function TimelineChart({ points, comparisonPoints, durationMs, label, comparisonLabel, monetary = true, target = false, maxValue, cumulative = false, color = OFF_COLOR, comparisonColor = ON_COLOR }: {
   points: ChartPoint[];
   comparisonPoints?: ChartPoint[];
   durationMs: number;
@@ -18,6 +22,9 @@ export function TimelineChart({ points, comparisonPoints, durationMs, label, com
   /** Input-derived bound, in micros for money; never a hidden future result. */
   maxValue?: number;
   cumulative?: boolean;
+  /** Defaults assume `points` is pacing off and `comparisonPoints` is pacing on; override when a chart shows only one mode as the primary line. */
+  color?: number;
+  comparisonColor?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<{ actual: am5xy.LineSeries; comparison?: am5xy.LineSeries; target?: am5xy.LineSeries } | null>(null);
@@ -40,15 +47,17 @@ export function TimelineChart({ points, comparisonPoints, durationMs, label, com
       series.strokes.template.set("strokeWidth", 2.5);
       return series;
     };
-    const actual = makeSeries(label, 0x16211d);
-    const comparison = comparisonLabel ? makeSeries(comparisonLabel, 0x2b6a63) : undefined;
-    comparison?.strokes.template.setAll({ strokeDasharray: [6, 4] });
-    const targetSeries = target ? chart.series.push(am5xy.LineSeries.new(root, { name: "Linear spend target", xAxis, yAxis, valueXField: "time", valueYField: "target", locationX: 0, stroke: am5.color(0x94a091), connect: false })) : undefined;
+    // Off and on are always the same two colors everywhere they appear, and that alone tells them apart —
+    // no dash pattern layered on top, so a line never has to be re-learned as "the dashed one" in one chart
+    // and "the solid one" in another.
+    const actual = makeSeries(label, color);
+    const comparison = comparisonLabel ? makeSeries(comparisonLabel, comparisonColor) : undefined;
+    const targetSeries = target ? chart.series.push(am5xy.LineSeries.new(root, { name: "Target spend", xAxis, yAxis, valueXField: "time", valueYField: "target", locationX: 0, stroke: am5.color(0x94a091), connect: false })) : undefined;
     targetSeries?.strokes.template.setAll({ strokeDasharray: [3, 3], strokeWidth: 1.5 });
     const cursor = chart.set("cursor", am5xy.XYCursor.new(root, { behavior: "none", xAxis })); cursor.lineY.set("visible", false);
     seriesRef.current = { actual, comparison, target: targetSeries };
     return () => { seriesRef.current = null; root.dispose(); };
-  }, [durationMs, label, comparisonLabel, monetary, target, maxValue]);
+  }, [durationMs, label, comparisonLabel, monetary, target, maxValue, color, comparisonColor]);
 
   useEffect(() => {
     const divisor = monetary ? 1_000_000 : 1;
