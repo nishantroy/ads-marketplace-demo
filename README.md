@@ -141,36 +141,34 @@ What exists today (after M2): the shared types, the pure engine, the seeded mark
 presets, the paired-run diagnostics, and the invariant checker, all covered by unit tests. The API and the
 playback UI arrive in later milestones.
 
-### Try the UI workspace
+### Run the live UI demo
 
-Click **Load unpaced walkthrough**, then play, change speed, or scrub the six-hour timeline. The
-marketplace revenue chart is the primary view. Expand **Follow one campaign** for spending against its
-target, **Why do impression prices change?** for competition/price charts, or **Inspect a request** for
-the request list and side sheet (Escape closes it). The side sheet follows a connected funnel: **Category
-matches -> Budget eligibility -> Pacing admission -> Quality gate and utility ranking -> Auction -> Winner**.
-Each stage shows entering/surviving counts and a survivor bar; expand it to see which campaigns continued
-or dropped out, and why. Auction bids are visible by default, with the recorded winner and runner-up
-highlighted; the final step explains the quality-adjusted charge. Candidate formulas/arithmetic live under
-**Curious about the implementation?** and start collapsed. The funnel only projects the existing trace; it
-does not rerun any engine logic.
+Start the app, then use **Run with pacing off**. Switch pacing on and run again to replay the identical
+4,000-request marketplace. The overview overlays the two current results at the same simulated cursor:
+solid is the selected mode and dashed is the other mode. Runs are comparable only when their displayed
+input hash and engine version match.
 
-The workspace currently loads four hand-authored requests from the tiny fixture (`src/lib/fixtures/tiny.ts`),
-not full engine output, so it can be reviewed before the live API is wired in. It only shows pacing off. The
-pacing switch sets a future-run preference; **Run simulation** is disabled until the API lane is connected.
-**Reset workspace** clears browser view state only. Only completed five-minute buckets are revealed; request
-timestamps must be strictly before the cursor. Price-chart gaps mean no filled impressions, not free ones.
+Expand **Follow one campaign** for spend against the same budget, **Why do impression prices change?** for
+competition/price charts, or **Inspect a request** for current request rows and a side sheet (Escape closes
+it). The side sheet follows a connected funnel: **Category matches → Budget eligibility → Pacing admission
+→ Quality gate and utility ranking → Auction → Winner**. It uses a server-recorded trace and never reruns
+the engine in the browser.
+
+Only completed five-minute buckets and requests strictly before the cursor are visible. Price-chart gaps
+mean no filled impressions, not free ones. The request list intentionally shows the first 30 revealed rows;
+this live demo has no historical request browser. **Reset live demo** clears both current results; a server
+restart does too.
 
 Charts use **amCharts 5**. Chart roots are created only in the browser and disposed on unmount; playback
 updates data without recreating the chart. Default amCharts attribution is retained, and its original
 license is served at [`/licenses/amcharts5-LICENSE.txt`](public/licenses/amcharts5-LICENSE.txt). Review
 licensing before public release.
 
-Live API wiring, matched pacing overlays, and UI/playback testing remain later chunks. For now validation
-is typecheck, lint, build, and manual review; automated browser testing is deferred.
+Automated browser testing remains deferred. For now validation is typecheck, lint, build, API tests, and
+manual review.
 
-What exists today: the shared types, pure engine, seeded marketplace and paired diagnostics, invariant
-checker, UI workspace with a hand-authored preview, and live-demo API endpoints for the current pacing-on/off
-pair. The next step is wiring the UI to those endpoints.
+What exists today: shared types, pure engine, seeded marketplace and paired diagnostics, invariant checker,
+live-demo API endpoints, and a UI wired to the current pacing-on/off pair.
 
 ## Layout
 
@@ -178,8 +176,8 @@ pair. The next step is wiring the UI to those endpoints.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
 - `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
 - `src/app/` Next.js app router pages, layout, styles, and API routes.
-- `src/components/simulator/` playback controller, charts, request side sheet, and hand-authored preview
-  data; replace preview loading with live API responses in the next UI integration chunk.
+- `src/components/simulator/` live playback controller, amCharts views, and request side sheet/funnel.
+  `preview-data.ts` is no longer used by the page and can be removed in a later cleanup.
 - `src/lib/server/` two-slot live state, input validation, engine adapter, and API service.
 
 ## UI design direction
@@ -189,5 +187,5 @@ pair. The next step is wiring the UI to those endpoints.
 compare fairly, make motion useful, and explain decisions before showing formulas. These are
 presentation/interaction rules, not changes to the simulation contract.
 
-Status: M2 is complete; the UI workspace and live-demo API are merged. Live UI/API wiring and full M4
-integration remain pending.
+Status: M2 and the live-demo API are complete; M4 is wired to current server results and awaits manual
+end-to-end review/polish.

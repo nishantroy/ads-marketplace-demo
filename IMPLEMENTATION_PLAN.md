@@ -27,7 +27,7 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | DONE | Claude (coordinating assistant) | Generator with baseline and small presets, budgets calibrated for full delivery (`baseline-2`); `docs/m2-diagnostics.md` committed; 44 tests, typecheck and lint pass |
 | M3 | Live-demo API, no persistence | M0; final integration M1/M2 | DONE | API assistant (`api-integration`, merged) | Latest on/off pair in server memory, no database/history; 6 focused tests, full suite, typecheck/lint/build, and paired 4,000-request smoke pass after merge. |
-| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant (merged from `ui-workspace`) | UI merged into main: workspace, playback, charts, request funnel/side sheet, all against a hand-authored preview walkthrough, not live engine output. Needs the preview data and any stale-contract references reconciled with the current utility-auction contract, then wiring to the M3 API once that merges. |
+| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant | Live API wiring complete: current on/off pair, shared-cursor overlays, current request rows/traces, reset/replacement/error states. Manual end-to-end review and polish remain. |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
 ### Work lane boundaries
@@ -221,22 +221,22 @@ UI refinement chunk implemented on `ui-workspace`: progressive disclosure, desig
 - [x] Reveal only completed buckets/earlier requests; support play/pause, speed, restart, scrub, campaign selection, and local list pagination.
 - [x] Keep actual run execution disabled until API wiring; label reset as UI-only.
 - [x] Run typecheck, lint, production build, and an HTTP smoke check.
-- [ ] Connect server run creation/reset/history, fetch request pages/details on demand, and support matched pacing overlays after M1/M2/API readiness.
+- [x] Connect server run creation/reset, fetch current request pages/details on demand, and support matched on/off overlays when input hash and engine version match. There is intentionally no history.
 - [ ] Human visual review and later UI/playback testing. Per the latest human request, no playback test suite is added in this chunk; prioritize the usable prototype and polish.
 
 These are preview-only completions. The full milestone tasks/gate below remain pending real integration.
 
 Tasks:
 
-- [ ] Add pacing toggle, run button, computation status, and reset-defaults button.
-- [ ] Load the latest pacing-on/off pair; do not add a run-history selector.
-- [ ] Add play/pause, speed, restart, and six-hour simulated clock; no simulation logic in the browser.
-- [ ] Chart marketplace cumulative revenue and per-campaign spend versus target.
-- [ ] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
-- [ ] Overlay matching on/off runs only; explain incompatible comparisons rather than silently allowing them.
-- [ ] Build paginated request list tied to the playback cursor and a detail side sheet.
-- [ ] Explain retrieval, exclusions, pacing, quality, utility ranking, shortlist, bids, runner-up, quality-adjusted price, and budget changes in the side sheet.
-- [ ] Include loading, failure, empty-auction, and no-run states; make the side sheet keyboard usable.
+- [x] Add pacing toggle, run button, computation status, and reset-live-demo button.
+- [x] Load the latest pacing-on/off pair; no run-history selector.
+- [x] Add play/pause, speed, restart, and six-hour simulated clock; no simulation logic in the browser.
+- [x] Chart marketplace cumulative revenue and per-campaign spend versus target.
+- [x] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
+- [x] Overlay matching on/off runs only; suppress the overlay when hashes/engine versions differ.
+- [x] Fetch a compact current request sample tied to playback cutoff and individual traces on demand for the side sheet.
+- [x] Explain retrieval, exclusions, pacing, quality, utility ranking, shortlist, bids, runner-up, quality-adjusted price, and budget changes in the side sheet.
+- [x] Include loading, failure, empty-auction, no-run, stale-result, and keyboard-dismissable side-sheet states.
 
 Playback contract: five-minute buckets (72 points), with metrics advancing at bucket boundaries. Do not imply exact request-level interpolation. Fetch detailed traces only when needed. Current metrics and visible request cutoffs must agree with the cursor; label final-run summaries separately. Average clearing price is over filled impressions; distinguish no sales from a zero price.
 
@@ -248,7 +248,7 @@ Tasks:
 
 - [ ] Add short in-context tooltips and a demo guide: run without pacing, inspect early/late behavior, run with pacing, compare matched runs, inspect supporting auctions.
 - [ ] Explain session budgets, threshold-only relevance effect, per-impression billing, losing-bid price support, and non-guaranteed revenue improvement.
-- [ ] Run the full local flow: seed → unpaced run → paced run → comparison playback → current request inspection → replace one mode → reset both.
+- [ ] Run the full local flow: seed → unpaced run → paced run → comparison playback → current request inspection → replace one mode → reset both. (Awaiting human manual test.)
 - [ ] Verify paired inputs match, all accounting invariants hold, and timelines reconcile with traces.
 - [ ] Document setup, migrations, reset behavior, test commands, known limits, and actual diagnostic observations in README.
 - [ ] Record checks, remaining limitations, and local commit handoff.
@@ -403,4 +403,13 @@ Remaining blockers / next owner:
 - Reconciliation: the API compiled and passed all focused tests against the current quality/utility contracts without changes to engine or shared types; its adapter already isolated engine imports.
 - Validation: `npm ci`; `npx next typegen`; `npm run typecheck`; `npm run lint`; `npx vitest run` (55/55); `npm run build`; and `git diff --check` all passed. Build reports all seven expected dynamic API routes.
 - Remaining work: replace UI preview loading with current-pair API calls, enable real run/reset controls, show matched pacing comparison, handle replacement/reset/stale result IDs, and perform manual end-to-end validation.
+
+### M4 live API wiring chunk
+
+- Owner: coordinating assistant on `main` after UI/API merges.
+- Changed: `src/components/simulator/simulator-preview.tsx`, `timeline-chart.tsx`, `request-funnel.tsx`, UI CSS, README, and this plan. No engine, API route, shared contract, or dependency change.
+- Implemented: initial scenario/current-pair load; selected-mode playback; run-with-pacing on/off; reset; current mode replacement; same-hash/version overlay at a shared cursor; stable budget-derived axes; compact request sample fetched with exclusive cursor cutoff; on-demand trace fetch; stale-result/HTTP error message; and no-result/loading states. The controller does not import the engine or preview fixture data.
+- Deliberate limits: only the current two server results are addressable, as specified. The request explorer shows the first 30 revealed rows, not a historical browser. UI does not claim a pacing revenue direction. Browser playback only reveals API-recorded outputs.
+- Validation: `npx next typegen`, `npm run typecheck`, `npm run lint`, and `npm run build` passed. Automated UI tests remain deferred by scope decision.
+- Next: human manual flow on port 3002: run off, run on, inspect shared charts at late cursor, open a request funnel, replace a mode, reset. Report UX/polish findings before further changes.
 

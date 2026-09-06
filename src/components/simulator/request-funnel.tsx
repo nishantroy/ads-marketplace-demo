@@ -52,14 +52,12 @@ export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenar
         c.scoring.evaluated && !c.scoring.passedThreshold ? "Removed · below the minimum quality" : c.ranking.evaluated && c.ranking.shortlisted ? `Continues · rank ${c.ranking.rank} by utility` : "Removed · outside the top ranks")),
     },
     {
-      title: "Auction", explanation: "Highest effective bid wins. Every bidder shown here is eligible to win and support the price.",
+      title: "Auction", explanation: "Highest utility wins. Every bidder shown here is eligible to win and support the price.",
       entered: finalists.length, survived: trace.participantCount, auction: true,
       attrition: finalists.length === 0 ? noEntrants : finalists.length === trace.participantCount ? "All finalists meet the minimum price." : `${finalists.length - trace.participantCount} removed · effective bid below the minimum price.`,
       rows: [],
     },
   ];
-  const runnerUp = participants.find(c => c.campaignId === trace.runnerUpCampaignId);
-  const runnerBid = runnerUp?.ranking.evaluated ? runnerUp.ranking.effectiveBidMicros : null;
   const orderedBidders = [...participants].sort((a, b) => {
     // Display the recorded winner/runner-up first, not a newly computed auction result.
     const roleOrder = (c: CandidateTrace) => c.campaignId === trace.winnerCampaignId ? 0 : c.campaignId === trace.runnerUpCampaignId ? 1 : 2;
@@ -83,7 +81,7 @@ export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenar
           </summary>
           {stage.auction ? <div className="stage-decisions">
             {orderedBidders.length === 0 ? <p className="small muted">No bids compete. No impression will be charged.</p> : <ul className="auction-bids">{orderedBidders.map(c => <li key={c.campaignId} className={c.campaignId === trace.winnerCampaignId ? "winning-bid" : ""}>
-              <span><strong>{name(c.campaignId)}</strong><small>{c.campaignId === trace.winnerCampaignId ? "Winner · highest effective bid" : c.campaignId === trace.runnerUpCampaignId ? "Runner-up · price support" : "Eligible bidder · did not set price"}</small></span>
+              <span><strong>{name(c.campaignId)}</strong><small>{c.campaignId === trace.winnerCampaignId ? "Winner · highest utility" : c.campaignId === trace.runnerUpCampaignId ? "Runner-up · price support" : "Eligible bidder · did not set price"}</small></span>
               <span className="auction-bid-value">{c.ranking.evaluated ? money(c.ranking.effectiveBidMicros) : "—"}<small>effective bid</small></span>
             </li>)}</ul>}
             {reserveExcluded.map(c => <p className="small muted" key={c.campaignId}>{name(c.campaignId)}: removed · effective bid below minimum price.</p>)}
@@ -99,7 +97,7 @@ export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenar
           <div className="stage-heading"><span className="eyebrow">{trace.filled ? "One impression awarded" : "No ad served"}</span><span className="stage-count">{trace.participantCount} → {trace.filled ? 1 : 0}</span></div>
           <h3>{name(trace.winnerCampaignId)}</h3>
           <p>{trace.filled ? <><strong>{money(trace.priceMicros)}</strong> charged for this impression</> : "No eligible auction participant; no charge."}</p>
-          <p className="muted">{runnerBid !== null ? `${name(trace.runnerUpCampaignId)} supplied the runner-up bid of ${money(runnerBid)}. ${runnerBid > scenario.config.reserveMicros ? "That bid sets the price." : `The ${money(scenario.config.reserveMicros)} minimum price applies.`}` : trace.filled ? `Only one bidder participated, so the ${money(scenario.config.reserveMicros)} minimum price applies.` : "An empty auction is a valid outcome."}</p>
+          <p className="muted">{trace.priceBasis ? `${name(trace.runnerUpCampaignId)} supplied runner-up utility ${trace.priceBasis.runnerUpUtility.toFixed(0)}. Dividing it by ${name(trace.winnerCampaignId)}’s quality (${trace.priceBasis.winnerQuality.toFixed(3)}) gives the price, subject to the minimum price.` : trace.filled ? `Only one bidder participated, so the ${money(scenario.config.reserveMicros)} minimum price applies.` : "An empty auction is a valid outcome."}</p>
           {trace.filled && <p className="small muted">Only the winner’s budget is charged. The same amount becomes marketplace revenue.</p>}
         </div>
       </li>
