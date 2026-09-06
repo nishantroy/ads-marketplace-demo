@@ -248,6 +248,8 @@ reduced motion; and say it in plain language before offering the math.
   curve — and run their own paired comparison, with the input hash keeping runs honest.
 - **Larger and longer simulations** — more campaigns, a full day, or multiple slots per request. Runs would
   need a job model instead of compute-on-request.
+- **More mature quality scoring** — there are no actual predictions today, so the quality scores are deterministic
+   and don't represent how previous behavior impacts future ranking. This is a key part of ad delivery evolution.
 - **Richer request inspection** — search and filter requests by campaign, outcome, or time window instead of
   the first 30 rows; "find a request where these two modes disagreed"; jump from a chart point to the requests
   behind it.
@@ -257,6 +259,7 @@ reduced motion; and say it in plain language before offering the math.
   realised value rather than predicted engagement.
 - **Persistence and sharing** — save a tweaked scenario and its results behind a URL. Deliberately not
   built for the demo; the engine and contracts were designed so it can be added without touching them.
+  - **Responsible UX** — the current demo was built explicitly for desktop, and doesn't work seamless on mobile devices.
 
 ## Status
 
