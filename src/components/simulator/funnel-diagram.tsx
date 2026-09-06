@@ -26,13 +26,15 @@ export function FunnelDiagram({ stages, activeIndex, doneUpTo, onSelect }: {
       const inset = (100 - bottomPct) / 2;
       const isLast = index === stages.length - 1;
       const state = index === activeIndex ? "active" : index < doneUpTo ? "done" : "";
-      return <button key={stage.id} role="listitem" type="button" className={`funnel-row ${state}`}
-        onClick={() => onSelect(index)} aria-current={index === activeIndex ? "step" : undefined}>
-        <span className="funnel-shape-slot" style={{ width: `${MAX_SHAPE_WIDTH_PX}px` }}>
-          <span className="funnel-shape" style={{ width: `${widthPx}px`, clipPath: isLast ? undefined : `polygon(0 0, 100% 0, ${100 - inset}% 100%, ${inset}% 100%)` }} aria-hidden="true" />
-        </span>
-        <span className="funnel-text"><span className="funnel-index">{index + 1}</span><span className="funnel-label">{stage.label}</span></span>
-      </button>;
+      return <div key={stage.id} role="listitem">
+        <button type="button" className={`funnel-row ${state}`}
+          onClick={() => onSelect(index)} aria-current={index === activeIndex ? "step" : undefined}>
+          <span className="funnel-shape-slot" style={{ width: `${MAX_SHAPE_WIDTH_PX}px` }}>
+            <span className="funnel-shape" style={{ width: `${widthPx}px`, clipPath: isLast ? undefined : `polygon(0 0, 100% 0, ${100 - inset}% 100%, ${inset}% 100%)` }} aria-hidden="true" />
+          </span>
+          <span className="funnel-text"><span className="funnel-index">{index + 1}</span><span className="funnel-label">{stage.label}</span></span>
+        </button>
+      </div>;
     })}
   </div>;
 }

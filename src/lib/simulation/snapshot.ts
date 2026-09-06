@@ -27,13 +27,16 @@ export function validateSnapshot(snapshot: ScenarioSnapshot): void {
   }
   assertMicros(config.reserveMicros, "reserveMicros");
   if (config.reserveMicros <= 0) throw new RangeError("reserveMicros must be positive");
-  if (!(config.qualityThreshold >= 0 && config.qualityThreshold <= 1)) {
-    throw new RangeError("qualityThreshold must be in [0, 1]");
+  // A zero gate admits zero-quality candidates, for which utility pricing has no meaningful critical bid.
+  if (!(Number.isFinite(config.qualityThreshold) && config.qualityThreshold > 0 && config.qualityThreshold <= 1)) {
+    throw new RangeError("qualityThreshold must be finite and in (0, 1]");
   }
   if (!Number.isInteger(config.shortlistSize) || config.shortlistSize < 1) {
     throw new RangeError("shortlistSize must be at least 1");
   }
-  if (!(config.ctrScale > 0) || !(config.cvrScale > 0)) throw new RangeError("ctrScale and cvrScale must be positive");
+  if (!(Number.isFinite(config.ctrScale) && config.ctrScale > 0) || !(Number.isFinite(config.cvrScale) && config.cvrScale > 0)) {
+    throw new RangeError("ctrScale and cvrScale must be finite and positive");
+  }
 
   const categories = new Set(snapshot.categories);
   const segments = new Set(snapshot.segments);

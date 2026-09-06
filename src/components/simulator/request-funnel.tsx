@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { CandidateTrace, RequestTrace, ScenarioSummary } from "../../lib/contracts";
 import { money } from "./playback";
 
@@ -14,6 +15,7 @@ interface Stage {
 
 /** Presentation-only projection. Never rerun eligibility, scoring, pacing, or the auction here. */
 export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenario: ScenarioSummary }) {
+  const headingId = useId();
   const name = (id: string | null) => scenario.campaigns.find(c => c.id === id)?.name ?? id ?? "None";
   const eligible = trace.candidates.filter(c => c.eligibility.passed);
   const pacingEvaluated = trace.candidates.filter(c => c.pacing.evaluated);
@@ -65,8 +67,8 @@ export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenar
   });
   const reserveExcluded = finalists.filter(c => c.auction.evaluated && !c.auction.participates);
 
-  return <section className="request-journey" aria-labelledby="funnel-heading">
-    <h3 id="funnel-heading">From search to one ad</h3>
+  return <section className="request-journey" aria-labelledby={headingId}>
+    <h3 id={headingId}>From search to one ad</h3>
     <p className="small muted">Follow the survivors. Expand any stage to see campaign decisions.</p>
     <ol className="funnel-stages">
       {stages.map((stage, index) => <li className="funnel-stage" key={stage.title}>

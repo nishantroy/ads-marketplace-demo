@@ -20,6 +20,13 @@ describe("M0 contracts", () => {
     expect(() => assertMicros(1.5, "x")).toThrow(RangeError);
     expect(() => assertMicros(MAX_MONEY_MICROS + 1, "x")).toThrow(RangeError);
     expect(dollars(0.1)).toBe(100_000);
+
+    const zeroThreshold = structuredClone(tinyScenario);
+    zeroThreshold.config.qualityThreshold = 0;
+    expect(() => validateSnapshot(zeroThreshold)).toThrow(/qualityThreshold/);
+    const infiniteScale = structuredClone(tinyScenario);
+    infiniteScale.config.ctrScale = Infinity;
+    expect(() => validateSnapshot(infiniteScale)).toThrow(/ctrScale/);
   });
 
   it("computes the documented engagement bases and qualities", () => {

@@ -36,18 +36,18 @@ export function effectiveBid(bidMicros: Micros, remainingMicros: Micros): Micros
  * Single-slot auction ranked by utility, priced by a quality-adjusted second price.
  *
  * The winner is the highest utility, not the highest bid, so a cheaper campaign that matches the user well
- * can beat an expensive one that does not. It pays the smallest bid that would still have kept it in front
- * of the runner-up:
+ * can beat an expensive one that does not. Its integer-micro price is the rounded critical value implied by
+ * the runner-up:
  *
- *   price = max(reserve, runner_up_utility / winner_quality)
+ *   price = round(max(reserve, runner_up_utility / winner_quality))
  *
  * That is what makes quality worth having. Charging the runner-up's raw bid instead would break here: the
  * runner-up may bid more than the winner, so the winner would be asked to pay above its own maximum, and
  * capping it there would hand the entire surplus to the platform every time quality decided the outcome.
  *
  * Because the winner's utility is at least the runner-up's, `runner_up_utility / winner_quality` never
- * exceeds the winner's effective bid, so a charge can never exceed a campaign's remaining budget. The
- * result is clamped to that bound anyway, since the division is floating point.
+ * exceeds the winner's effective bid, so a charge can never exceed a campaign's remaining budget. Rounding
+ * is intentionally part of the frozen integer-money rule; the result is clamped to that bound as well.
  *
  * A sole participant pays the reserve; no participants means no winner and zero spend.
  */

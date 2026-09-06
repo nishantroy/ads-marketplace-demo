@@ -11,8 +11,11 @@ const HOUR = 60 * 60 * 1000;
 describe("scenario generation", () => {
   const scenario = smallScenario();
 
-  it("is deterministic for a seed and changes with the seed", () => {
+  it("is deterministic for a seed, changes with the seed, and does not share preset configuration", () => {
     expect(generateScenario(SMALL_PRESET)).toEqual(scenario);
+    const isolated = generateScenario(SMALL_PRESET);
+    isolated.config.reserveMicros += 1;
+    expect(generateScenario(SMALL_PRESET).config.reserveMicros).toBe(SMALL_PRESET.config.reserveMicros);
     const other = generateScenario({ ...SMALL_PRESET, seed: "different" });
     expect(inputHash(other)).not.toBe(inputHash(scenario));
     expect(other.requests).toHaveLength(scenario.requests.length);

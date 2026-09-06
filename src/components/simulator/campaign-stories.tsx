@@ -19,7 +19,7 @@ const STORIES: StoryDefinition[] = [
   {
     campaignId: "travel-c0",
     title: "Spends almost immediately",
-    explanation: "A strong campaign can use nearly its full budget before the session has really begun. Paced, the same budget instead reaches shoppers across the full six hours — and by staying in the marketplace late, this advertiser keeps setting competitive prices in other campaigns’ auctions too.",
+    explanation: "A strong campaign can use nearly its full budget before the session has really begun. With pacing, the same budget remains available across more of the six-hour session.",
     checkpointHour: 1,
     checkpointLabel: "spent by 1h",
   },

@@ -28,7 +28,8 @@ utility   = effective_bid * quality
 Relevance is a property of the user-campaign pair, not of the category alone. Because a campaign's affinity
 differs by segment, ranking order changes from request to request rather than being a fixed leaderboard.
 
-`quality >= qualityThreshold` passes the gate. Survivors are ranked by utility descending, ties by campaign
+`quality >= qualityThreshold` passes the gate. `qualityThreshold` is finite and in `(0, 1]`, so zero-quality
+candidates cannot enter a degenerate zero-utility auction. Survivors are ranked by utility descending, ties by campaign
 id ascending, and the top `shortlistSize` (4) reach the auction. Quality decides participation; utility
 decides order.
 
@@ -56,8 +57,8 @@ admitted    = draw < probability
 4. Quality gate (`excluded_threshold`), then rank by utility and shortlist (`excluded_shortlist`).
 5. `effectiveBid = min(bid, remaining)`; finalists with `effectiveBid >= reserve` participate; others
    `excluded_reserve` (unreachable after step 2 but recorded for completeness).
-6. Winner = highest utility, ties by campaign id ascending. The winner pays the least it could have bid and
-   still stayed ahead of the runner-up:
+6. Winner = highest utility, ties by campaign id ascending. The winner pays the integer-rounded critical
+   price implied by the runner-up:
 
 ```text
 price = clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)
@@ -67,7 +68,8 @@ price = clamp(round(runner_up_utility / winner_quality), reserve, winner_effecti
 7. Deduct the price from the winner's balance.
 
 Because `winner_utility >= runner_up_utility`, the raw quotient never exceeds the winner's effective bid, so
-balances cannot go negative; the clamp guards the floating-point division. Charging the runner-up's raw bid
+balances cannot go negative; the clamp guards floating-point division and integer rounding. The approved
+`round` rule means the stored microdollar price can differ by less than one microdollar from the exact critical value. Charging the runner-up's raw bid
 instead would be incoherent here: the runner-up can outbid the winner, so the winner would be asked to pay
 above its own maximum, and capping there would take the whole surplus every time quality decided the result.
 

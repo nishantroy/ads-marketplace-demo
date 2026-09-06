@@ -62,7 +62,7 @@ const TUTORIAL_STAGES: TutorialStage[] = [
     intro: "Every advertiser running an ad in that category gets pulled in as a possible match.",
     points: [
       { term: "Campaign", body: "One advertiser's ad, along with its budget and targeting." },
-      { term: "Candidate", body: "Any campaign considered for this one request. Two dozen or more is typical here." },
+      { term: "Candidate", body: "Any campaign running in the matching category and considered for this one request." },
     ],
   },
   {
@@ -94,7 +94,7 @@ const TUTORIAL_STAGES: TutorialStage[] = [
     intro: "The top-ranked candidates compete head-to-head for the one available slot.",
     points: [
       { term: "Winner", body: "The candidate with the highest utility, not necessarily the highest bid." },
-      { term: "Price", body: "What the winner actually pays \u2014 set by the runner-up's bid, adjusted for the winner's own quality." },
+      { term: "Price", body: "What the winner actually pays \u2014 derived from the runner-up’s utility, adjusted for the winner’s own quality." },
     ],
   },
   {
@@ -172,6 +172,12 @@ export function SimulatorPreview() {
     const timer = window.setInterval(() => setCursor(value => Math.min(value + 1, cap)), AUTOPLAY_MS_PER_BUCKET);
     return () => window.clearInterval(timer);
   }, [step, offTimeline.length, onTimeline.length, reducedMotion]);
+
+  // Direct links and browser history can choose Compare before timelines finish loading. Once they do,
+  // comparison/exploration always begins from the completed experiment, never a stale zero cursor.
+  useEffect(() => {
+    if ((step === "compare" || step === "explore") && timelineLength > 0) setCursor(timelineLength);
+  }, [step, timelineLength]);
 
   function applyStep(next: Step) {
     setStep(next); setInspecting(null);
@@ -307,7 +313,7 @@ export function SimulatorPreview() {
     {step === "briefing" && <section className="scene">
       <div className="scene-content">
         <p className="eyebrow">The experiment</p>
-        <h1>Two identical six-hour auctions. One difference.</h1>
+        <h1>Two identical six-hour marketplace sessions. One difference.</h1>
         <p className="lede">The same 4,000 requests, the same campaigns, the same budgets — run once with advertisers free to
           spend as fast as they can win, and once with pacing holding some of that budget back for later. Watch each play
           out, then compare what changed.</p>
@@ -352,9 +358,9 @@ export function SimulatorPreview() {
 
         <aside className="scene-aside">
           {step === "unpaced" && <>
-            <h2>Highest bidder wins, adjusted for fit</h2>
-            <p>Every incoming request is a small auction. Whoever wins pays a price shaped by the next-best bid, not
-              their own.</p>
+            <h2>Highest utility wins—not simply the highest bid</h2>
+            <p>Every incoming request is a small auction. Whoever wins pays a price shaped by the next-best utility,
+              not their own bid.</p>
             <ul className="concept-points">
               <li><span className="term">No pacing</span>Every campaign bids in every auction it can afford, as fast as it can win.</li>
               <li><span className="term">Cheap late impressions</span>Once the strongest campaigns run out of budget, only weaker bidders remain — so late auctions often clear at a lower price.</li>
@@ -369,16 +375,15 @@ export function SimulatorPreview() {
             </ul>
           </>}
           {step === "compare" && <>
-            <h2>Pacing has real value — just not more revenue</h2>
+            <h2>Pacing changes timing—not necessarily revenue</h2>
             {prediction && <p className="predict-recap">You predicted pacing would <strong>{prediction === "more" ? "increase" : prediction === "less" ? "decrease" : "barely change"}</strong> revenue.</p>}
             <p>Pacing off finished with <strong>{money(offRevenue)}</strong>; pacing on finished with <strong>{money(onRevenue)}</strong> —
               close enough that pacing is not, on its own, a lever for making more money.</p>
-            <p>What it does instead is spread that spend evenly across the session rather than letting it front-load, and
-              that evenness is valuable in its own right:</p>
+            <p>In this recorded session, pacing spreads spend more evenly instead of letting it front-load. That timing can matter:</p>
             <ul className="concept-points">
-              <li><span className="term">Users</span>Don&rsquo;t see a surge of ads early in the session and then an emptier marketplace for the rest of the day.</li>
-              <li><span className="term">Advertisers</span>Reach people who search throughout the whole session, not just whoever happened to search first.</li>
-              <li><span className="term">The platform</span>Keeps clearing prices more stable through the day, instead of them crashing once the biggest spenders run out.</li>
+              <li><span className="term">Marketplace availability</span>More late requests can still have a funded candidate competing for the slot.</li>
+              <li><span className="term">Advertiser reach</span>Budget remains available to compete for later searches, not only the earliest ones.</li>
+              <li><span className="term">Prices</span>Late clearing prices can retain more support when eligible competitors remain.</li>
             </ul>
           </>}
         </aside>

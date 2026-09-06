@@ -21,7 +21,7 @@ export interface ScenarioConfig {
   bucketDurationMs: number;
   /** Auction reserve price. Must be positive. */
   reserveMicros: Micros;
-  /** Minimum quality to pass the gate, in [0, 1]. Quality is engagement x pair relevance. */
+  /** Minimum quality to pass the gate, in (0, 1]. Quality is engagement x pair relevance. */
   qualityThreshold: number;
   /** Maximum number of quality-qualified candidates that reach the auction, ranked by utility. */
   shortlistSize: number;

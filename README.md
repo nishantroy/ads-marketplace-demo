@@ -60,10 +60,10 @@ Quality decides who takes part, through a fixed gate. Utility decides the order.
 affinity differs by segment, relevance is a property of the user-campaign pair, so the ranking genuinely
 changes from request to request rather than being a fixed leaderboard per category.
 
-The winner pays the least it could have bid and still stayed ahead of the runner-up:
+The winner pays the integer-rounded critical price implied by the runner-up:
 
 ```text
-price = runner-up utility / winner quality, floored at the reserve and capped by the winner's effective bid
+price = round(runner-up utility / winner quality), floored at the reserve and capped by the winner's effective bid
 ```
 
 So better quality buys the same position for less. This is also why the price cannot simply be the

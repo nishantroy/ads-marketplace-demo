@@ -463,3 +463,10 @@ Remaining blockers / next owner:
 - Commands run and outcomes: `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 55/55 passed (unaffected — this chunk is UI-only); `npm run build` OK (static home route, dynamic API routes unaffected).
 - Decisions / deviations: pacing auto-computation is guarded by a ref flag against duplicate POSTs from React Strict Mode's double-invoked effects in development. Step pills are always clickable (no gating on data readiness beyond the initial load), matching the design doc's "nothing is locked behind the sequence." Manual browser verification was intentionally not performed in this chunk, per the human's standing instruction to own UI testing themselves; only the automated checks above were run.
 - Remaining blockers / next owner: human visual review of the new flow. No automated UI/playback tests exist, consistent with the project's light-verification preference.
+
+### Review follow-up: comparison, copy, accessibility, and snapshot edges
+
+- Human direction: address R1, R6, R9, and the documented edge cases before final prototype wrap-up; leave R7 invariant hardening deferred because the simulator inputs remain controlled.
+- Implemented: direct/history navigation to Compare or Explore completes once timelines load; tutorial and auction copy now accurately describe matching-category candidates, utility ranking, runner-up utility, and paired marketplace sessions; paired funnels receive unique heading IDs and tutorial controls retain native button semantics. Generated snapshots clone config, finite positive score scales and a positive quality gate are required, and pricing documentation accurately calls `round` an integer-rounded critical price without changing the approved auction formula.
+- Tests: added validation coverage for zero threshold and infinite scale, plus configuration isolation. Browser recheck of direct `/compare` shows `$2,113.68` at `06:00`.
+- Deferred: R2 compatibility guard, R4 responsive mobile layout, R7 invariant hardening, and remaining optional/documentation cleanup are retained in `docs/code-review-follow-up.md`.

@@ -317,7 +317,7 @@ export function generateScenario(preset: GeneratorPreset): ScenarioSnapshot {
     seed: preset.seed,
     categories,
     segments,
-    config: preset.config,
+    config: { ...preset.config },
     users,
     campaigns: buildCampaigns(preset, categories, segments),
     requests: buildRequests(preset, categories, users),

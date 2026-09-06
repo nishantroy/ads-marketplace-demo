@@ -1,7 +1,8 @@
 # Code review — deferred until after design polish
 
-**Status: deferred by human direction.** Complete design polish first, then revisit this checklist.
-No fixes were made as part of the review or this documentation task.
+**Status: partially addressed after design polish.** Recheck the remaining unchecked items before final wrap-up.
+The selected fixes below were made after the review; no simulation behavior was changed beyond rejecting
+invalid, degenerate snapshots.
 
 The review covered the engine, fixtures, API/state handling, contracts, UI, configuration, tests, and docs.
 It included uncommitted UI work on top of commit `ef5a5a0`; concurrent design changes may supersede findings.
@@ -17,14 +18,14 @@ Cleanup should remove stale assumptions and small duplication, not introduce new
 
 ### R1 — High: Compare can display incorrect zero-dollar results
 
-- [ ] Fix completed comparison state on direct navigation and browser Back/Forward.
+- [x] Fix completed comparison state on direct navigation and browser Back/Forward.
 - Path: `src/components/simulator/simulator-preview.tsx` — cursor initialization, `applyStep`, and `popstate` effect.
 - Chrome reproduction: opening `/compare` directly shows **$0.00**, “both complete at 00:00,” despite completed runs.
   Clicking Compare explicitly shows **$2,113.68 at 06:00**; navigating away and pressing Back returns to zero.
 - Causes: URL restoration sets the step without initializing its cursor; the once-bound `popstate` listener
   captures the initial `timelineLength = 0`.
-- Smallest fix: derive the completed comparison frame from loaded timelines rather than relying on a navigation
-  side effect. Test direct links, reload, Back/Forward, and navigation before data finishes loading.
+- Resolved: an effect completes Compare/Explore once timelines load, independent of navigation timing.
+  Re-tested direct `/compare`: it shows `$2,113.68` at `06:00`.
 
 ### R2 — High: Run compatibility is not checked
 
@@ -65,14 +66,15 @@ Cleanup should remove stale assumptions and small duplication, not introduce new
 
 ### R6 — Medium: Teaching copy contradicts the model
 
-- [ ] Reconcile tutorial and scene copy with recorded data and the engine contract.
+- [x] Reconcile tutorial and scene copy with recorded data and the engine contract.
 - Path: `src/components/simulator/simulator-preview.tsx` — tutorial definitions and scene copy.
 - “Two dozen or more” candidates is incorrect: every baseline request retrieves exactly **eight**.
 - Runner-up **bid** adjusted only by winner quality omits runner-up quality. The numerator is runner-up **utility**.
 - “Two identical six-hour auctions” should describe two sessions containing 4,000 individual auctions each.
 - “Highest bidder wins” is a misleading headline for utility ranking.
-- Derive fixture counts from scenario data where practical; preserve the distinction between possible effects
-  and guaranteed outcomes. Pacing does not guarantee higher revenue.
+- Resolved: removed the incorrect candidate count, corrected the runner-up utility explanation, described
+  sessions rather than one six-hour auction, and corrected the utility-ranking heading. Copy now frames pacing
+  effects as observations from this recorded session, not guarantees.
 
 ### R7 — Medium: Invariant checks miss inconsistent traces
 
@@ -88,30 +90,30 @@ Cleanup should remove stale assumptions and small duplication, not introduce new
 
 ### R8 — Medium: Generated scenarios share mutable configuration
 
-- [ ] Copy configuration when generating a snapshot.
+- [x] Copy configuration when generating a snapshot.
 - Path: `src/lib/simulation/generate.ts` — `config: preset.config`.
 - Confirmed in an isolated process: mutating one generated scenario's reserve changes the next baseline's reserve.
 - Server cloning protects ordinary API consumers, but fixture callers/tests can contaminate later generation.
-- Smallest fix: copy the flat config and test isolation between generated snapshots and presets.
+- Resolved: generation now copies the flat config; a test verifies a mutated generated scenario cannot alter
+  a subsequent result or the preset.
 
 ### R9 — Low: Accessibility identifiers and roles
 
-- [ ] Give paired funnels unique heading IDs and preserve native button semantics.
+- [x] Give paired funnels unique heading IDs and preserve native button semantics.
 - Paths: `src/components/simulator/request-funnel.tsx`, `src/components/simulator/funnel-diagram.tsx`.
 - Both request funnels render `id="funnel-heading"`; Chrome confirmed duplicate IDs in the paired sheet.
-- Use `useId()`. For tutorial list semantics, put buttons inside list items rather than replacing the button role
-  with `role="listitem"`.
+- Resolved: paired funnel headings use `useId()`; tutorial buttons retain their native button role inside
+  separate list-item wrappers.
 
 ## Engine edge cases — not baseline failures
 
 Resolve these explicitly rather than silently changing simulation semantics:
 
-- [ ] Reject non-finite normalization scales; `validateSnapshot()` currently accepts `Infinity`.
-- [ ] Decide/document zero-quality auction behavior. The permitted zero quality threshold allows zero-quality
-  contestants; a probe recorded a `0 / 0` price basis while pricing fell back to the winner's effective bid.
-- [ ] Qualify the “least winning bid” explanation for integer rounding. The approved `Math.round()` formula can
-  round below the exact critical bid: 533333 micros at quality 0.9 yields utility 479999.7 against runner-up
-  utility 480000. This is consistent with the frozen rounding rule, not a reason to change it without approval.
+- [x] Reject non-finite normalization scales; `validateSnapshot()` now requires finite positive scales.
+- [x] Reject the degenerate zero-quality case at the input boundary: quality thresholds must be finite and in
+  `(0, 1]`, so zero-quality candidates cannot enter a zero-utility auction. Tests cover zero and `Infinity`.
+- [x] Qualify the “least winning bid” explanation for integer rounding. Code and docs now call it the
+  integer-rounded critical price implied by the runner-up; the approved `Math.round()` formula is unchanged.
 
 ## Optional simplicity checklist
 
