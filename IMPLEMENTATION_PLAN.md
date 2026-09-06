@@ -1,0 +1,247 @@
+# Ads marketplace simulator — implementation plan
+
+## Goal and scope
+
+Build a small educational simulator for a non-technical audience showing candidate generation → ranking → auction, and how budget pacing changes campaign spend and marketplace competition over time.
+
+Target: a basic local prototype in approximately 2–3 hours of implementation, not a production-ready application. Use TypeScript, Next.js, and Postgres. Eventual Vercel hosting should remain possible, but deployment, authentication, workers, WebSockets, real ad integrations, and simulated clicks/conversions are out of scope.
+
+Compute a whole run server-side, persist it, then animate a lightweight timeline in the browser. Store every request trace; fetch details on demand. Do not implement an HTTP call or database write per simulated impression.
+
+## Progress and coordination
+
+Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the stated gate and recorded evidence. Owners claim tasks before editing; use handoff notes for branch/commit and unresolved issues.
+
+| ID | Milestone | Depends on | Status | Owner | Evidence / handoff |
+| --- | --- | --- | --- | --- | --- |
+| M0 | Approve boundaries, scaffold, freeze contracts | — | TODO | Unassigned | Planning documents created; implementation not started |
+| M1 | Pure engine and unit tests | M0 | TODO | Unassigned | — |
+| M2 | Seeded marketplace and paired-run diagnostics | M1 | TODO | Unassigned | — |
+| M3 | Postgres persistence and API | M0; final integration M1/M2 | TODO | Unassigned | — |
+| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
+| M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
+
+### Parallel work boundaries
+
+After M0 freezes shared types and response examples:
+
+- Engine lane: `src/lib/simulation/**`, engine tests; owns M1 then M2.
+- Persistence lane: `src/lib/db/**`, migrations, `src/app/api/**`, API tests; owns M3. Use a tiny contract fixture until the engine is available.
+- UI lane: `src/components/**`, page/layout/style files, UI tests; owns M4. Use contract-shaped responses until APIs are available.
+- Coordinator: shared contracts, package/lock files, root configuration, progress tracking, integration, M5. Batch dependency installation before parallel work.
+
+Paths are proposed and become final in M0. Shared types live in `src/lib/contracts/**`. A worker must request coordination before changing a shared contract. Parallel scaffolding is allowed; no milestone is DONE until its real integration gate passes.
+
+## Locked simulation contract
+
+### Inputs
+
+Initial fixture targets (tune and version before freezing the baseline):
+
+- Six-hour session; budgets apply to the session, not a 24-hour day.
+- 4,000 pre-generated requests, 20 static users, four categories.
+- 32 campaigns, initially eight per category, mixed impression/click/conversion objectives.
+- One ad slot per request; all campaigns bid and pay per impression.
+- Users have category relevance in [0, 1]. Campaigns have category, objective, fixed historical rates, maximum impression bid, and session budget.
+- Requests contain ID, simulated timestamp, user ID, category, and optional illustrative query text. Category alone drives retrieval.
+- No clicks/conversions are sampled; no prediction noise or changing user behavior.
+
+### Ordered funnel
+
+1. Retrieve all campaigns matching the request category. Objectives label candidates and determine scoring; no random retrieval quota is needed.
+2. Exclude campaigns with remaining budget below the reserve price.
+3. Apply campaign-specific pacing admission.
+4. Score admitted campaigns, apply a fixed threshold, retain the top four qualifying candidates.
+5. Run a single-slot second-price auction among finalists.
+6. Deduct the clearing price and record the complete trace, including empty auctions.
+
+Use deterministic score/bid tie-breaking by campaign ID and order requests by timestamp then request ID. A paced-out campaign cannot win or set a price.
+
+### Ranking
+
+```text
+score = fixed_normalized_objective_prediction × user_category_relevance
+```
+
+Normalize using fixed scenario parameters, not current candidate-pool statistics. The common user relevance multiplier changes threshold eligibility, not relative ordering within a request. Scores are educational objective proxies, not calibrated economic values. Exact objective formulas/scales and threshold are an M0 decision, not permission to invent new signals silently.
+
+### Pacing
+
+```text
+target = session_budget × elapsed_time / session_duration
+probability = clamp((target - spend_so_far) / bid_per_impression, 0, 1)
+admit = stable_random(seed, request_id, campaign_id, "pacing") < probability
+```
+
+Pacing off sets probability to one. There is no look-ahead allowance. At time zero, pacing on rejects all candidates. A bid must be positive. Use a specified stable hash-to-[0,1) mapping; never use a shared sequential random stream in request processing.
+
+### Auction and accounting
+
+```text
+effective_bid = min(bid_per_impression, remaining_budget)
+winner = finalist with highest effective_bid
+price = max(reserve, second_highest_effective_bid)
+```
+
+Only finalists with effective bid at least the reserve participate. One bidder pays reserve; no bidders means no winner and zero spend. Store all monetary amounts in integer microdollars and validate safe ranges. Reserve must be positive. Target and probability may use fractional arithmetic; actual charges remain integers.
+
+### Comparability and interpretation
+
+Both modes use identical immutable inputs, deterministic predictions, ordering, and auction rules, and start with fresh balances. Pacing is the only mode difference. Store engine version plus input snapshot/hash, including request-stream identity and configuration. Only compare runs with matching input hashes and engine versions (mode excluded from the input hash).
+
+Pacing may preserve later competition and reduce cheap late impressions; it need not increase total revenue. If both modes exhaust every budget, their final revenue is equal. Scarce supply alone does not guarantee a revenue uplift.
+
+## M0 — Foundation and shared contracts
+
+Tasks:
+
+- [ ] Inspect repository and parent instructions; confirm the unresolved choices below with the human.
+- [ ] Choose explicit unused local app, test-server, and Postgres ports after checking the parent registry and listeners. Update the parent registry and required local setup documentation/configuration together.
+- [ ] Scaffold Next.js/TypeScript, local Postgres configuration, environment example, and test commands. Proposed data access: Drizzle; confirm first.
+- [ ] Define shared scenario, campaign, user, request, candidate trace, run summary, timeline, and API error/response types.
+- [ ] Specify score formulas, numeric bounds, threshold, hash behavior, timestamp boundaries, and tie-breaking in code and docs.
+- [ ] Provide a tiny hand-calculable fixture and contract-shaped API responses for parallel development.
+
+Gate: typecheck and a smoke test pass; local setup commands are documented; no unresolved question changes the shared contract. Record actual port reservations, commands, and decisions below.
+
+## M1 — Pure deterministic engine
+
+Tasks:
+
+- [ ] Implement `simulate(scenarioSnapshot, pacingEnabled)` with no I/O and an in-memory campaign balance map.
+- [ ] Implement retrieval, eligibility, pacing, scoring/shortlist, auction, and accounting as testable functions.
+- [ ] Produce request traces, five-minute buckets, and run summary.
+- [ ] Capture candidate exclusion reasons, budget before/after, target, probability, random draw, score components, shortlist, effective bids, winner, runner-up, and price.
+- [ ] Distinguish not-evaluated downstream stages from rejected stages in traces.
+
+Required tests:
+
+- [ ] Repeat execution yields identical results for the same inputs and mode.
+- [ ] Hand-calculated one-bidder, multi-bidder, tied-bid, and empty-auction cases.
+- [ ] Paced-out, below-threshold, and budget-ineligible candidates cannot set prices or win.
+- [ ] Remaining budget caps effective bids; winner price never exceeds effective bid.
+- [ ] Time zero, same-timestamp ordering, session boundary, and pacing probability limits.
+- [ ] Revenue equals total campaign spend and sum of request prices; no overspend; at most one winner per request.
+- [ ] Buckets reconcile with request events and final summaries.
+
+Gate: engine tests and typecheck pass on the tiny fixture. No React/database dependency enters the engine.
+
+## M2 — Seeded marketplace and experimental diagnostics
+
+Tasks:
+
+- [ ] Generate deterministic users, campaigns, and timestamped requests for the six-hour session.
+- [ ] Include uneven traffic and substantial late traffic in every category.
+- [ ] Include several strong bidders with finite budgets, medium price-support bidders, and funded lower bidders per category.
+- [ ] Ensure ranking scores/threshold do not collapse most auctions to zero or one participant. Include all objectives in score-qualified candidates.
+- [ ] Run pacing on/off and produce a reproducible diagnostic report.
+- [ ] Freeze/version the baseline seed and parameter values after inspection; retain the report.
+
+Report: score-qualified request coverage, filled requests, multiple-bidder auction share, budget-exhaustion times, early/late participant counts and prices, campaign spend trajectories, final revenue, and unspent budgets. Separate threshold qualification from pacing/shortlist attrition.
+
+Gate: accounting invariants pass for both modes; the report demonstrates understandable spend-pattern differences and assesses late competition. If it does not illustrate the intended lesson, discuss fixture tuning with the human before UI polish. Higher paced revenue is not a correctness assertion. Confirm an explicit coverage target with the human rather than treating “majority” as an unstated numeric requirement.
+
+## M3 — Persistence and APIs
+
+Proposed minimal schema:
+
+| Table | Stored data |
+| --- | --- |
+| `scenarios` | Immutable version, seed, config, campaign/user JSONB; active default selection |
+| `requests` | Scenario ID, request ID, timestamp/order, user/category/query |
+| `runs` | Input snapshot/hash, immutable request reference, engine version, pacing mode, status, summary |
+| `request_results` | Run/request IDs, winner, price, full trace JSONB |
+| `run_buckets` | Five-minute marketplace and per-campaign metrics |
+
+Index request ordering and run/request lookup. Enforce uniqueness of run/request results. Preserve historical input references when defaults change.
+
+Endpoints:
+
+```text
+GET  /api/scenario
+POST /api/scenario/reset
+POST /api/runs                    { pacingEnabled }
+GET  /api/runs
+GET  /api/runs/:id
+GET  /api/runs/:id/timeline
+GET  /api/runs/:id/requests        paginated
+GET  /api/runs/:id/requests/:requestId
+```
+
+Tasks:
+
+- [ ] Add schema/migrations and idempotent default seeding.
+- [ ] Validate inputs and return consistent errors and not-found responses.
+- [ ] Load immutable input, compute on the server, and batch-save outputs transactionally.
+- [ ] Mark a run completed only after all outputs are durable; represent running/failed states honestly.
+- [ ] Disable duplicate submission in the UI; avoid adding a job/idempotency framework unless a demonstrated need is discussed.
+- [ ] Reset restores/activates baseline defaults without changing historical runs. Starting a run always resets balances independently of this action.
+- [ ] Retrieve timelines separately from paginated request lists and detailed traces.
+
+Gate: real Postgres integration tests cover seed repeatability, run creation/reload, trace/summary reconciliation, reset with historical-run preservation, invalid IDs/inputs, and rollback on persistence failure. Run the complete 4,000-request engine through the API and record runtime/output size. Confirm it fits a synchronous local request; reassess eventual hosting limits before deployment, not by assumption.
+
+## M4 — Playback workspace and request inspection
+
+Tasks:
+
+- [ ] Add pacing toggle, run button, computation status, and reset-defaults button.
+- [ ] Load the latest results and provide a minimal selector for persisted runs.
+- [ ] Add play/pause, speed, restart, and six-hour simulated clock; no simulation logic in the browser.
+- [ ] Chart marketplace cumulative revenue and per-campaign spend versus target.
+- [ ] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
+- [ ] Overlay matching on/off runs only; explain incompatible comparisons rather than silently allowing them.
+- [ ] Build paginated request list tied to the playback cursor and a detail side sheet.
+- [ ] Explain retrieval, exclusions, pacing, scores, shortlist, bids, runner-up, price, and budget changes in the side sheet.
+- [ ] Include loading, failure, empty-auction, and no-run states; make the side sheet keyboard usable.
+
+Playback contract: five-minute buckets (72 points), with metrics advancing at bucket boundaries. Do not imply exact request-level interpolation. Fetch detailed traces only when needed. Current metrics and visible request cutoffs must agree with the cursor; label final-run summaries separately. Average clearing price is over filled impressions; distinguish no sales from a zero price.
+
+Gate: UI tests with contract fixtures exercise controls and error/empty states; real API integration verifies playback never mutates results, requests do not leak beyond the cursor, matched overlays work, and a side sheet agrees with its persisted trace. Changing the pacing toggle affects the next run, never relabels the displayed run.
+
+## M5 — End-to-end verification and handoff
+
+Tasks:
+
+- [ ] Add short in-context tooltips and a demo guide: run without pacing, inspect early/late behavior, run with pacing, compare matched runs, inspect supporting auctions.
+- [ ] Explain session budgets, threshold-only relevance effect, per-impression billing, losing-bid price support, and non-guaranteed revenue improvement.
+- [ ] Run the full local flow: seed → unpaced run → paced run → playback → request inspection → reload → reset → reopen historical run.
+- [ ] Verify paired inputs match, all accounting invariants hold, and timelines reconcile with traces.
+- [ ] Document setup, migrations, reset behavior, test commands, known limits, and actual diagnostic observations in README.
+- [ ] Record checks, remaining limitations, and local commit handoff.
+
+Gate: engine/unit, typecheck, DB integration, and focused browser checks actually pass; the basic demo runs from documented local setup. No claim of deployed readiness or guaranteed pacing uplift.
+
+## Decisions requiring confirmation at M0
+
+| Question | Proposed default | Status |
+| --- | --- | --- |
+| Package manager, ORM, tests/charts | npm; Drizzle; Vitest + focused Playwright; lightweight chart library | Awaiting confirmation |
+| Objective score definitions | Impression base score 1; click historical CTR divided by fixed CTR scale; conversion per-impression historical conversion rate divided by fixed conversion scale; clamp bases to [0,1], then multiply relevance | Awaiting confirmation; inspect objective survival and avoid claiming calibrated predictions |
+| Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics | Numeric values not yet selected |
+| Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Awaiting confirmation |
+| Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Awaiting confirmation |
+| Reset/history | Restore baseline active scenario; retain immutable historical runs | Agreed in architecture plan |
+
+Do not quietly substitute a different ranking/pacing/auction mechanism to make the plots look better. Surface ambiguous or conflicting outcomes and agree on changes.
+
+## Validation and handoff log
+
+Append an entry per completed logical chunk:
+
+```text
+Date / task / owner:
+Paths and branch or commit:
+Commands run and outcomes:
+Observed simulation results (if applicable):
+Decisions / deviations:
+Remaining blockers / next owner:
+```
+
+### Planning chunk
+
+- Owner: coordinating assistant.
+- Paths: `IMPLEMENTATION_PLAN.md`, `AGENTS.md`, `README.md`.
+- Checks: `git diff --check`; Python standard-library check of local Markdown link targets, balanced fenced blocks, and M0–M5 headings. All passed.
+- Implementation status: no application code or application checks yet; no ports assigned or services started.
+- Next: human confirmation of M0 choices, then scaffold and freeze shared contracts.
+- Commit: local documentation chunk, `docs: record simulator plan and agent workflow`.
