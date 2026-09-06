@@ -8,22 +8,31 @@ Target: a basic local prototype in approximately 2–3 hours of implementation, 
 
 Compute a whole run server-side, persist it, then animate a lightweight timeline in the browser. Store every request trace; fetch details on demand. Do not implement an HTTP call or database write per simulated impression.
 
+### Scope decisions (confirmed 2026-09-06)
+
+- Verification load is deliberately light for the prototype: focused unit tests written alongside code, plus manual human testing. Real-database integration tests, Playwright/browser automation, rollback-on-failure tests, and similar hardening are deferred follow-ups, listed under "Deferred productionization" below.
+- Work lanes run sequentially with a single implementer; the parallel-lane boundaries below remain as path ownership guidance only.
+- Get the basic simulator working end to end before wiring persistence. Postgres is provided by Neon (serverless Postgres compatible with Vercel), not a local Docker container. Until M3, runs live in an in-memory server-side store behind a small repository interface so Neon can replace it without touching the engine or UI.
+- Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
+- Ranking order within a category is intentionally static across requests (score is a per-campaign constant times a per-user relevance shared by every candidate in the request). This is enough to demonstrate the funnel; per-user or per-campaign signals are not being added.
+- Pacing keeps the simple spend-versus-target probability. Because second-price charges sit below bid, the probability is fractional only inside a one-bid-wide band and behaves almost binarily. A later option, sequenced only if needed, is to make probability also depend on the fraction of total budget already spent.
+
 ## Progress and coordination
 
 Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the stated gate and recorded evidence. Owners claim tasks before editing; use handoff notes for branch/commit and unresolved issues.
 
 | ID | Milestone | Depends on | Status | Owner | Evidence / handoff |
 | --- | --- | --- | --- | --- | --- |
-| M0 | Approve boundaries, scaffold, freeze contracts | — | TODO | Unassigned | Planning documents created; implementation not started |
+| M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
 | M1 | Pure engine and unit tests | M0 | TODO | Unassigned | — |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | TODO | Unassigned | — |
-| M3 | Postgres persistence and API | M0; final integration M1/M2 | TODO | Unassigned | — |
+| M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
-### Parallel work boundaries
+### Work lane boundaries
 
-After M0 freezes shared types and response examples:
+Lanes run sequentially (confirmed). After M0 freezes shared types and response examples, path ownership is:
 
 - Engine lane: `src/lib/simulation/**`, engine tests; owns M1 then M2.
 - Persistence lane: `src/lib/db/**`, migrations, `src/app/api/**`, API tests; owns M3. Use a tiny contract fixture until the engine is available.
@@ -65,6 +74,16 @@ score = fixed_normalized_objective_prediction × user_category_relevance
 
 Normalize using fixed scenario parameters, not current candidate-pool statistics. The common user relevance multiplier changes threshold eligibility, not relative ordering within a request. Scores are educational objective proxies, not calibrated economic values. Exact objective formulas/scales and threshold are an M0 decision, not permission to invent new signals silently.
 
+Confirmed objective bases (all clamped to [0, 1]):
+
+```text
+impression: quality_prior                      (seeded per campaign, in (0, 1])
+click:      historical_ctr / ctr_scale
+conversion: historical_cvr / cvr_scale         (per-impression conversion rate)
+```
+
+Scales are fixed scenario parameters chosen so a good campaign of any objective lands around 0.7–0.9. Because the shortlist is score-only, only campaigns in a category's score top four can ever support prices; the M2 fixture must deliberately decorrelate score rank from bid rank.
+
 ### Pacing
 
 ```text
@@ -74,6 +93,8 @@ admit = stable_random(seed, request_id, campaign_id, "pacing") < probability
 ```
 
 Pacing off sets probability to one. There is no look-ahead allowance. At time zero, pacing on rejects all candidates. A bid must be positive. Use a specified stable hash-to-[0,1) mapping; never use a shared sequential random stream in request processing.
+
+Known behaviour: since clearing prices are at or below bid, spend lags target and the probability is nearly always 0 or 1. Keep it simple for now; a budget-fraction-aware variant is a possible later follow-up, not part of this build.
 
 ### Auction and accounting
 
@@ -95,14 +116,14 @@ Pacing may preserve later competition and reduce cheap late impressions; it need
 
 Tasks:
 
-- [ ] Inspect repository and parent instructions; confirm the unresolved choices below with the human.
-- [ ] Choose explicit unused local app, test-server, and Postgres ports after checking the parent registry and listeners. Update the parent registry and required local setup documentation/configuration together.
-- [ ] Scaffold Next.js/TypeScript, local Postgres configuration, environment example, and test commands. Proposed data access: Drizzle; confirm first.
-- [ ] Define shared scenario, campaign, user, request, candidate trace, run summary, timeline, and API error/response types.
-- [ ] Specify score formulas, numeric bounds, threshold, hash behavior, timestamp boundaries, and tie-breaking in code and docs.
-- [ ] Provide a tiny hand-calculable fixture and contract-shaped API responses for parallel development.
+- [x] Inspect repository and parent instructions; confirm the unresolved choices below with the human.
+- [x] Choose explicit unused local app and test-server ports after checking the parent registry and listeners (confirmed: app 3002, test server 3012; no local Postgres port because the database is Neon). Update the parent registry and root Makefile together.
+- [x] Scaffold Next.js/TypeScript, environment example, and test commands (npm, Vitest, Recharts; Drizzle with node-postgres when M3 begins).
+- [x] Define shared scenario, campaign, user, request, candidate trace, run summary, timeline, and API error/response types.
+- [x] Specify score formulas, numeric bounds, threshold, hash behavior, timestamp boundaries, and tie-breaking in code and docs.
+- [x] Provide a tiny hand-calculable fixture (`src/lib/fixtures/tiny.ts`). Contract-shaped API response examples were skipped because lanes run sequentially; the API types in `src/lib/contracts/api.ts` are the contract.
 
-Gate: typecheck and a smoke test pass; local setup commands are documented; no unresolved question changes the shared contract. Record actual port reservations, commands, and decisions below.
+Gate: typecheck and a smoke unit test pass; local setup commands are documented; no unresolved question changes the shared contract. Record actual port reservations, commands, and decisions below.
 
 ## M1 — Pure deterministic engine
 
@@ -143,6 +164,8 @@ Gate: accounting invariants pass for both modes; the report demonstrates underst
 
 ## M3 — Persistence and APIs
 
+Sequencing: an in-memory run store behind a repository interface is used from M1 onward so the UI can be exercised before any database exists. M3 replaces that store with Neon Postgres (Drizzle + node-postgres, `DATABASE_URL` from an ignored `.env.local`; a committed `.env.example` shows the shape). No local Docker Postgres is planned.
+
 Proposed minimal schema:
 
 | Table | Stored data |
@@ -178,7 +201,7 @@ Tasks:
 - [ ] Reset restores/activates baseline defaults without changing historical runs. Starting a run always resets balances independently of this action.
 - [ ] Retrieve timelines separately from paginated request lists and detailed traces.
 
-Gate: real Postgres integration tests cover seed repeatability, run creation/reload, trace/summary reconciliation, reset with historical-run preservation, invalid IDs/inputs, and rollback on persistence failure. Run the complete 4,000-request engine through the API and record runtime/output size. Confirm it fits a synchronous local request; reassess eventual hosting limits before deployment, not by assumption.
+Gate (prototype): unit tests for input validation and the repository interface; manual check that a run can be created, reloaded after a server restart, and reset preserves historical runs. Run the complete 4,000-request engine through the API and record runtime/output size. Real-database integration tests and rollback-on-failure coverage are deferred (see "Deferred productionization").
 
 ## M4 — Playback workspace and request inspection
 
@@ -196,7 +219,7 @@ Tasks:
 
 Playback contract: five-minute buckets (72 points), with metrics advancing at bucket boundaries. Do not imply exact request-level interpolation. Fetch detailed traces only when needed. Current metrics and visible request cutoffs must agree with the cursor; label final-run summaries separately. Average clearing price is over filled impressions; distinguish no sales from a zero price.
 
-Gate: UI tests with contract fixtures exercise controls and error/empty states; real API integration verifies playback never mutates results, requests do not leak beyond the cursor, matched overlays work, and a side sheet agrees with its persisted trace. Changing the pacing toggle affects the next run, never relabels the displayed run.
+Gate (prototype): manual browser check that controls, error/empty states, matched overlays, and the side sheet work; playback never mutates results; requests do not leak beyond the cursor; a side sheet agrees with its persisted trace. Changing the pacing toggle affects the next run, never relabels the displayed run. Automated UI tests are deferred.
 
 ## M5 — End-to-end verification and handoff
 
@@ -209,18 +232,27 @@ Tasks:
 - [ ] Document setup, migrations, reset behavior, test commands, known limits, and actual diagnostic observations in README.
 - [ ] Record checks, remaining limitations, and local commit handoff.
 
-Gate: engine/unit, typecheck, DB integration, and focused browser checks actually pass; the basic demo runs from documented local setup. No claim of deployed readiness or guaranteed pacing uplift.
+Gate: engine/unit tests and typecheck pass; the documented manual demo flow works from local setup. No claim of deployed readiness or guaranteed pacing uplift.
+
+## Deferred productionization (follow-ups, not in this build)
+
+- Real Postgres integration tests: seed repeatability, run reload, reset preservation, rollback on persistence failure.
+- Playwright/browser automation for playback controls and error/empty states.
+- Job/idempotency handling for run submission; hosting-limit assessment for synchronous run computation on Vercel.
+- Optional pacing refinement: probability that also accounts for the fraction of total budget spent.
 
 ## Decisions requiring confirmation at M0
 
 | Question | Proposed default | Status |
 | --- | --- | --- |
-| Package manager, ORM, tests/charts | npm; Drizzle; Vitest + focused Playwright; lightweight chart library | Awaiting confirmation |
-| Objective score definitions | Impression base score 1; click historical CTR divided by fixed CTR scale; conversion per-impression historical conversion rate divided by fixed conversion scale; clamp bases to [0,1], then multiply relevance | Awaiting confirmation; inspect objective survival and avoid claiming calibrated predictions |
-| Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics | Numeric values not yet selected |
-| Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Awaiting confirmation |
-| Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Awaiting confirmation |
-| Reset/history | Restore baseline active scenario; retain immutable historical runs | Agreed in architecture plan |
+| Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; Recharts | Confirmed 2026-09-06 |
+| Objective score definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp bases to [0,1], then multiply relevance | Confirmed 2026-09-06 |
+| Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics; scales chosen so a good campaign of any objective scores about 0.7–0.9 | Numeric values selected in M2 |
+| Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
+| Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
+| Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
+| Database | Neon Postgres, added after the basic simulator works; in-memory store until then | Confirmed 2026-09-06 |
+| Reset/history | Reset re-seeds the baseline scenario if missing and marks it active; retain immutable historical runs | Confirmed 2026-09-06 |
 
 Do not quietly substitute a different ranking/pacing/auction mechanism to make the plots look better. Surface ambiguous or conflicting outcomes and agree on changes.
 
@@ -245,3 +277,11 @@ Remaining blockers / next owner:
 - Implementation status: no application code or application checks yet; no ports assigned or services started.
 - Next: human confirmation of M0 choices, then scaffold and freeze shared contracts.
 - Commit: local documentation chunk, `docs: record simulator plan and agent workflow`.
+
+### M0 chunk
+
+- Date / task / owner: 2026-09-06 / M0 scaffold and frozen contracts / Claude (coordinating assistant).
+- Paths: `package.json`, `package-lock.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `vitest.config.mts`, `.gitignore`, `.env.example`, `CLAUDE.md`, `AGENTS.md` (Next.js managed block appended), `README.md`, `docs/engine-spec.md`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/globals.css`, `src/lib/contracts/**`, `src/lib/simulation/{version,hash,scoring,snapshot,m0.test}.ts`, `src/lib/fixtures/tiny.ts`. Parent registry `../AGENTS.md` and `../Makefile` gained ports 3002 (app) and 3012 (reserved test server).
+- Commands run and outcomes: `npm install` (Next 16.3.4, React 19.2.8, Recharts 3.10, Vitest 5.0, `@types/node` bumped to 24 for Vitest peer range); `npx next typegen` OK; `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 4/4 passed; `npm run dev` served HTTP 200 on 127.0.0.1:3002 and was stopped.
+- Decisions / deviations: Google Fonts removed from the scaffold layout to avoid a network dependency at build time. Objective bases, stable hash, request ordering, and tie-breaking are frozen in `docs/engine-spec.md`. `thresholdQualifiedCount` is recorded per request as a diagnostic (score-only, before budget/pacing) so M2 can separate threshold qualification from attrition without changing the funnel.
+- Remaining blockers / next owner: none. Next is M1 (pure engine), same implementer.
