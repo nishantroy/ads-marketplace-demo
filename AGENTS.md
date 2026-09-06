@@ -12,7 +12,8 @@ Applies throughout this repository, in addition to `../AGENTS.md`.
 
 ## Incremental delivery
 
-- Work in small, independently testable chunks. Pass the relevant milestone gate before dependent integration work.
+- Work in small, independently testable chunks. Pass the relevant milestone gate before dependent integration work. Deliver one chunk (typically one milestone) per turn, commit it, then stop and report so the human can test before the next chunk starts; do not chain milestones in one go.
+- Keep `README.md` current in the same chunk as the code: it must explain how the app works at that point (funnel, data flow, what exists so far), not only setup commands.
 - Update the plan's task status, validation evidence, decisions, and handoff notes in the same chunk as implementation.
 - Run focused checks and report exact commands and outcomes. Never claim unrun checks passed. Mark blocked or unavailable checks explicitly.
 - Commit completed, validated logical chunks locally with descriptive messages. Do not wait until the entire app is finished. Never push without human authorization.
