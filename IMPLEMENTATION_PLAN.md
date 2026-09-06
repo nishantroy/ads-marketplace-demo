@@ -205,6 +205,8 @@ Gate (prototype): unit tests for input validation and the repository interface; 
 
 ## M4 — Playback workspace and request inspection
 
+Request-funnel UI chunk implemented: the sheet now presents a connected trace-derived journey. Owned paths: `src/components/simulator/{request-sheet,request-funnel}.tsx`, funnel CSS, README/plan, and UI design principles on `ui-workspace`. No shared types, engine, API, or dependency edits. UI/playback tests remain deferred; human visual review and full M4 integration are still pending.
+
 All UI work follows [UI design principles](docs/ui-design-principles.md). They govern presentation and interactions, not simulation semantics.
 
 UI refinement chunk implemented on `ui-workspace`: progressive disclosure, design-principle documentation/agent links, and the human-authorized Recharts → amCharts 5 dependency migration (`package.json` and lockfile included). Main's engine/API files remain untouched. UI testing stays deferred; full M4 remains IN PROGRESS.
@@ -323,3 +325,12 @@ Remaining blockers / next owner:
 - Licensing: read the installed amCharts LICENSE; retain default branding and include the original license in public assets. No license key supplied or branding suppression. Review release requirements before hosting publicly.
 - Validation: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed. Refreshed the preview on reserved loopback port 3012; HTTP smoke checks returned 200 for `/` and `/licenses/amcharts5-LICENSE.txt`. `npm ls @amcharts/amcharts5 --depth=0` confirms 5.20.5. No automated UI/playback suite added or run. Human visual review and real-data integration remain pending.
 - Handoff: bring the design-principle document and AGENTS link into main along with the UI branch so all agents receive the rule. Preserve main's newer engine/M2 progress when merging plan/README conflicts. Reinstall dependencies after integration.
+
+### M4 request-funnel presentation
+
+- Owner/branch: UI assistant / `ui-workspace`.
+- Implemented: six connected numbered stages, entrant/survivor counts, bars proportional to retrieved candidates, plain-language attrition, expandable per-stage campaign decisions, threshold versus shortlist exclusions, auction bidders with recorded winner/runner-up, and terminal winner/charge explanation. Auction bids start visible; formulas and candidate arithmetic remain in a separate collapsed section.
+- Trace semantics: use stage `evaluated` flags and recorded decisions, not re-computed scores or budget rules. A campaign excluded earlier never appears as rejected again downstream. Empty stages and no-winner outcomes remain readable; minimum-price pricing is distinguished from runner-up price support.
+- Paths: `src/components/simulator/{request-funnel,request-sheet}.tsx`, `src/app/globals.css`, `docs/ui-design-principles.md`, README, plan. No engine/API/contracts/dependencies changed.
+- Validation: `npm run typecheck`, `npm run lint`, `npm run build`, and `git diff --check` passed. Refreshed the worktree's preview on 127.0.0.1:3012; HTTP smoke check returned 200 and listener was verified. No UI/playback tests added or run.
+- Human review suggestion: load walkthrough, inspect r1 for a multi-bidder auction; advance past 02:00 and inspect r3 for ranking narrowing three campaigns to one and minimum-price billing. The preview does not contain a paced run or all exclusion cases; real-data integration remains pending.

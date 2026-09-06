@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { CandidateTrace, RequestTrace, ScenarioSummary } from "../../lib/contracts";
 import { money, sessionTime } from "./playback";
+import { RequestFunnel } from "./request-funnel";
 
 const outcomes: Record<CandidateTrace["outcome"], string> = {
   won: "Won impression", lost: "Lost auction", excluded_budget: "Insufficient budget",
@@ -38,20 +39,10 @@ export function RequestSheet({ trace, scenario, onClose, preview = false }: {
         </header>
         <p className="muted">Session {sessionTime(trace.timestampMs)} · {scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId} · {trace.category}</p>
         {preview && <p className="notice compact">Hand-authored walkthrough, not a recorded engine run.</p>}
-        <div className="request-result">
-          <span className="eyebrow">{trace.filled ? "Impression awarded" : "No ad served"}</span>
-          <h3>{name(trace.winnerCampaignId)}</h3>
-          <p>{trace.filled ? <><strong>{money(trace.priceMicros)}</strong> charged for this impression</> : "No eligible auction participant; no charge."}</p>
-          <p className="muted">{trace.runnerUpCampaignId ? `${name(trace.runnerUpCampaignId)} was the runner-up and supported the price.` : trace.filled ? `Only one bidder participated, so the ${money(scenario.config.reserveMicros)} reserve set the price.` : "An empty auction is a valid outcome."}</p>
-        </div>
-        <ol className="funnel-summary">
-          <li><b>{trace.retrievedCount}</b><span>Category matches</span></li>
-          <li><b>{trace.shortlist.length}</b><span>Ranked finalists</span></li>
-          <li><b>{trace.participantCount}</b><span>Auction bidders</span></li>
-        </ol>
-        <p className="muted small">Score threshold ≥ {scenario.config.scoreThreshold} · Top {scenario.config.shortlistSize} qualify · Bids and prices are per impression.</p>
-        <h3 className="section-title">What happened to each campaign?</h3>
-        <p className="small muted">Expand a campaign if you want the scores, pacing decision, and budget arithmetic.</p>
+        <RequestFunnel trace={trace} scenario={scenario} />
+        <details className="implementation-details">
+        <summary>Curious about the implementation?</summary>
+        <p className="small muted">Expand a campaign for its scores, pacing decision, and budget arithmetic. Score threshold ≥ {scenario.config.scoreThreshold}. Bids and prices are per impression.</p>
         {trace.candidates.map(candidate => (
           <details className="candidate-card" key={candidate.campaignId}>
             <summary><span><strong>{name(candidate.campaignId)}</strong><small>{candidate.objective} objective</small></span>
@@ -74,6 +65,7 @@ export function RequestSheet({ trace, scenario, onClose, preview = false }: {
             </dl>
           </details>
         ))}
+        </details>
         <p className="sheet-footnote">Ranking decides who reaches the auction. Bids decide who wins. Only campaigns eligible to win can support the price.</p>
       </div>
     </dialog>

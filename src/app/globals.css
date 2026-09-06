@@ -164,10 +164,41 @@ td small { display: block; color: var(--muted); margin-top: 3px; font-size: 10px
 .request-result { padding: 20px; border: 1px solid #d6e5d8; background: #edf5ee; border-radius: 8px; margin: 20px 0; }
 .request-result h3 { font-size: 21px; margin: 6px 0; }
 .request-result > p { font-size: 12px; margin-top: 8px; }
-.funnel-summary { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0 12px; padding: 0; }
-.funnel-summary li { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 12px; text-align: center; }
-.funnel-summary b { display: block; font-size: 22px; font-weight: 500; }
-.funnel-summary span { color: var(--muted); font-size: 10px; }
+.request-journey { margin-top: 24px; }
+.request-journey > p { margin-top: 7px; }
+.funnel-stages { list-style: none; padding: 0; margin: 22px 0 16px; }
+.funnel-stage { position: relative; padding-left: 38px; margin-bottom: 14px; }
+.funnel-stage:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: 28px; bottom: -14px; border-left: 2px solid #d4e1d8; }
+.stage-number { position: absolute; top: 3px; left: 0; display: grid; place-items: center; width: 26px; height: 26px; background: #edf3ee; color: var(--green); border: 1px solid #d4e1d8; border-radius: 50%; font-size: 11px; font-weight: 600; }
+.stage-card { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.stage-card > summary { display: block; padding: 15px 17px; list-style: none; }
+.stage-card > summary::-webkit-details-marker { display: none; }
+.stage-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.stage-heading > strong { font-size: 14px; font-weight: 600; }
+.stage-count { white-space: nowrap; color: var(--green); font-size: 13px; font-variant-numeric: tabular-nums; }
+.stage-description { display: block; color: var(--muted); font-size: 12px; margin-top: 7px; }
+.survivor-track { display: block; height: 5px; background: #eef2ed; border-radius: 5px; margin-top: 14px; overflow: hidden; }
+.survivor-track > span { display: block; height: 100%; background: #8fbaa2; border-radius: inherit; }
+.stage-attrition { display: block; color: var(--muted); font-size: 11px; margin-top: 9px; }
+.stage-expand { display: block; color: var(--green); font-size: 11px; margin-top: 10px; }
+.stage-card .when-open, .stage-card[open] .when-closed { display: none; }
+.stage-card[open] .when-open { display: inline; }
+.stage-decisions { list-style: none; margin: 0; padding: 12px 17px; border-top: 1px solid var(--border); background: #fafcf9; }
+.stage-decision { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; padding: 7px 0; font-size: 11px; }
+.stage-decision strong { font-weight: 500; }
+.decision-pass { color: var(--green); }
+.decision-drop { color: #8a6030; }
+.auction-bids { list-style: none; margin: 0 0 10px; padding: 0; }
+.auction-bids li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 8px; border-bottom: 1px solid var(--border); }
+.auction-bids li.winning-bid { background: #eaf4ed; border-radius: 5px; }
+.auction-bids strong { font-size: 12px; font-weight: 500; }
+.auction-bids small { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+.auction-bid-value { text-align: right; font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.final-stage .request-result { margin: 0; }
+.final-stage .stage-number { background: var(--green); color: white; }
+.implementation-details { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 20px; }
+.implementation-details > summary { font-size: 12px; color: var(--muted); }
+.implementation-details > p { margin-top: 14px; }
 .section-title { margin: 28px 0 14px; }
 .candidate-card { background: white; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
 .candidate-card summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px; }

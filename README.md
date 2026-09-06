@@ -52,7 +52,13 @@ on `main`; this worktree does not include or change that in-progress engine work
 Click **Load unpaced walkthrough**, then play, change speed, or scrub the six-hour timeline. The
 marketplace revenue chart is the primary view. Expand **Follow one campaign** for spending against its
 target, **Why do impression prices change?** for competition/price charts, or **Inspect a request**
-for the request list and side sheet (Escape closes it). Candidate arithmetic starts collapsed.
+for the request list and side sheet (Escape closes it). The side sheet now follows a connected funnel:
+**Category matches → Budget eligibility → Pacing admission → Ranking finalists → Auction → Winner**.
+Each stage shows entering/surviving counts and a survivor bar; expand it to see which campaigns
+continued or dropped out, and why. Ranking distinguishes minimum-score failures from shortlist cuts.
+Auction bids are visible by default, with the recorded winner and runner-up highlighted; the final
+step explains the charge. Candidate formulas/arithmetic live under **Curious about the implementation?**
+and start collapsed. The funnel only projects the existing trace—it does not rerun any engine logic.
 
 Scenario/next-run settings and the guide are also collapsed; the pacing formula lives under optional
 implementation details in the guide, not alongside the main playback controls.

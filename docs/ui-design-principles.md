@@ -59,7 +59,8 @@ Explain the chain: budget runs out → campaign leaves → fewer bidders → pot
 
 - One dominant marketplace revenue chart; campaign spending is secondary, not a competing dashboard tile.
 - Competition charts and the request explorer are collapsed until requested.
-- In request details, show the outcome and high-level funnel first. Candidate arithmetic starts collapsed, including the winner.
+- Make request details a connected funnel: category matches → budget eligibility → pacing admission → ranking finalists → auction → winner. Show counts and plain-language attrition at each stage; stage expansion reveals campaign decisions. Distinguish threshold failures from shortlist cuts, and never count an earlier exclusion as a later-stage failure.
+- Show the auction's recorded winner, runner-up, and effective bids, then explain the clearing price at the final step. Keep candidate formulas and arithmetic in a separate collapsed implementation section, including the winner's arithmetic.
 - Prefer whitespace and clear headings over more cards, badges, borders, or decorative text.
 - Keep controls keyboard-operable, focus visible, dialog dismissal predictable, and narrow layouts readable.
 - Theme/color polish is secondary to hierarchy and the working prototype; no new product features are implied by these principles.
