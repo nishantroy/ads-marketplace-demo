@@ -11,7 +11,7 @@ Compute a whole run server-side, persist it, then animate a lightweight timeline
 ### Scope decisions (confirmed 2026-09-06)
 
 - Verification load is deliberately light for the prototype: focused unit tests written alongside code, plus manual human testing. Real-database integration tests, Playwright/browser automation, rollback-on-failure tests, and similar hardening are deferred follow-ups, listed under "Deferred productionization" below.
-- Work lanes run sequentially with a single implementer; the parallel-lane boundaries below remain as path ownership guidance only.
+- Updated by human request: M1 continues on `main` with another agent; the UI lane now runs in parallel on branch `ui-workspace`, worktree `../ads-marketplace-demo-ui`. Shared contracts remain frozen; UI work does not edit engine/API/dependency files.
 - Get the basic simulator working end to end before wiring persistence. Postgres is provided by Neon (serverless Postgres compatible with Vercel), not a local Docker container. Until M3, runs live in an in-memory server-side store behind a small repository interface so Neon can replace it without touching the engine or UI.
 - Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
 - Ranking order within a category is intentionally static across requests (score is a per-campaign constant times a per-user relevance shared by every candidate in the request). This is enough to demonstrate the funnel; per-user or per-campaign signals are not being added.
@@ -27,12 +27,12 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M1 | Pure engine and unit tests | M0 | TODO | Unassigned | — |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | TODO | Unassigned | — |
 | M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
-| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
+| M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant (`ui-workspace`) | First chunk: contract-shaped tiny preview, playback/charts/request side sheet. Engine/API wiring and real-data gate remain pending. |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
 ### Work lane boundaries
 
-Lanes run sequentially (confirmed). After M0 freezes shared types and response examples, path ownership is:
+M1 and UI now run in separate worktrees per the latest human request. UI owns `src/components/simulator/**`, app page/layout/styles, and branch-local README/plan updates. It will not edit shared contracts, package files, or the other agent's working tree. After M0 freezes shared types, path ownership is:
 
 - Engine lane: `src/lib/simulation/**`, engine tests; owns M1 then M2.
 - Persistence lane: `src/lib/db/**`, migrations, `src/app/api/**`, API tests; owns M3. Use a tiny contract fixture until the engine is available.
@@ -205,6 +205,19 @@ Gate (prototype): unit tests for input validation and the repository interface; 
 
 ## M4 — Playback workspace and request inspection
 
+### UI preview chunk (parallel worktree)
+
+- [x] Create isolated `ui-workspace` branch/worktree from `a47f34b`; leave M1 work on `main` untouched.
+- [x] Build the responsive workspace, controls, charts, and keyboard-dismissable request side sheet against the frozen types.
+- [x] Use an explicitly labeled, hand-authored four-request M0 walkthrough; do not fabricate paced results.
+- [x] Reveal only completed buckets/earlier requests; support play/pause, speed, restart, scrub, campaign selection, and local list pagination.
+- [x] Keep actual run execution disabled until API wiring; label reset as UI-only.
+- [x] Run typecheck, lint, production build, and an HTTP smoke check.
+- [ ] Connect server run creation/reset/history, fetch request pages/details on demand, and support matched pacing overlays after M1/M2/API readiness.
+- [ ] Human visual review and later UI/playback testing. Per the latest human request, no playback test suite is added in this chunk; prioritize the usable prototype and polish.
+
+These are preview-only completions. The full milestone tasks/gate below remain pending real integration.
+
 Tasks:
 
 - [ ] Add pacing toggle, run button, computation status, and reset-defaults button.
@@ -285,3 +298,14 @@ Remaining blockers / next owner:
 - Commands run and outcomes: `npm install` (Next 16.3.4, React 19.2.8, Recharts 3.10, Vitest 5.0, `@types/node` bumped to 24 for Vitest peer range); `npx next typegen` OK; `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 4/4 passed; `npm run dev` served HTTP 200 on 127.0.0.1:3002 and was stopped.
 - Decisions / deviations: Google Fonts removed from the scaffold layout to avoid a network dependency at build time. Objective bases, stable hash, request ordering, and tie-breaking are frozen in `docs/engine-spec.md`. `thresholdQualifiedCount` is recorded per request as a diagnostic (score-only, before budget/pacing) so M2 can separate threshold qualification from attrition without changing the funnel.
 - Remaining blockers / next owner: none. Next is M1 (pure engine), same implementer.
+
+### M4 UI preview chunk
+
+- Owner: UI assistant; branch `ui-workspace`, worktree `../ads-marketplace-demo-ui`, based on `a47f34b`.
+- Owned paths changed: `src/components/simulator/**`, `src/app/{page.tsx,layout.tsx,globals.css}`, branch-local `README.md` and this plan. No engine, API, contract, dependency/lockfile, or parent infrastructure edits.
+- Implemented: responsive light workspace, empty state, explicit preview load/reset, next-run pacing preference with disabled server execution, bucket playback/scrub/speed, campaign selector, four chart views, cursor-filtered locally paginated requests, native modal side sheet, adjacent educational explanations.
+- Data boundary: four hand-authored unpaced M0 examples with contract-shaped traces/timeline/summary; not simulation evidence. Preview-only aggregation summarizes those recorded examples and does not implement an engine. All four traces are bundled temporarily; production request fetching and comparisons are pending.
+- Validation: `npm ci` succeeded without dependency changes; `npx next typegen`, `npm run typecheck`, `npm run lint`, `npm run build` passed. Initial lint caught an ordinary home anchor; replaced with Next Link and reran successfully. `curl --fail http://127.0.0.1:3012` returned HTTP 200; listener verified on loopback 3012, the existing reserved test port. No browser/playback tests run or added, per human direction.
+- Manual preview server: `npx next start -p 3012 -H 127.0.0.1`; log `/tmp/ads-marketplace-ui-preview.log`. Main's development port 3002 is left free. No permanent port assignment changed.
+- Integration handoff: chart and request sheet consume frozen contract types; replace the isolated preview controller/data source with API loading once ready. Merge README/plan sections carefully because the M1 agent may also update them. Do not mark M4 DONE until real-data integration and the agreed manual gate pass.
+- Commit intent: `feat(ui): add isolated simulator workspace preview`.

@@ -42,15 +42,45 @@ everything, so the browser can play the result back without recomputing anything
 
 Exact formulas, bounds and tie-breaking rules are in [docs/engine-spec.md](docs/engine-spec.md).
 
-What exists today (after M0): the shared types, the score formulas, the stable hash used for pacing draws,
-snapshot validation, and a tiny hand-calculable fixture with unit tests. The engine loop, seeded
-marketplace, API, and playback UI arrive in later milestones.
+On the `ui-workspace` branch, the home page now offers a **UI preview** alongside the M0 shared types,
+score formulas, stable hash, snapshot validation, and tiny fixture. Another agent is implementing M1
+on `main`; this worktree does not include or change that in-progress engine work.
+
+### Try the UI preview
+
+Click **Load unpaced walkthrough**, then play, change speed, or scrub the six-hour timeline. Select a
+campaign to see spend against its target. **Inspect** a request to follow eligibility, ranking,
+runner-up price support, and budget deductions in the side sheet (Escape closes it).
+
+The preview uses four hand-authored requests from the documented tiny fixture, not engine-produced
+results. It only includes pacing off. The pacing switch sets a future-run preference; **Run simulation**
+is deliberately disabled until server execution is connected. **Reset UI preview** clears browser view
+state only—it does not reset a database. Reloading the page clears the preview too.
+
+Only completed five-minute buckets are revealed; request timestamps must be strictly before the
+cursor. Price-chart gaps mean no filled impressions, not free impressions. Full-session totals are
+separately labeled. There is no simulated auction or budget mutation during browser playback.
+
+For side-by-side manual preview while `main` uses development port 3002, use the already-reserved test
+port 3012 (check it is free first):
+
+```bash
+npm run build
+npx next start -p 3012 -H 127.0.0.1   # http://127.0.0.1:3012
+```
+
+No new port or dependency is needed. API integration, matched pacing overlays, live request fetching,
+run history, and UI/playback testing remain later chunks. For now validation is typecheck, lint, build,
+and an HTTP smoke check; visual/browser testing is deferred at the human's request.
 
 ## Layout
 
 - `src/lib/contracts/` shared types: scenario, campaigns, users, requests, traces, run summary, timeline, API shapes.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
 - `src/lib/fixtures/` hand-calculable tiny scenario used by unit tests.
-- `src/app/` Next.js app router pages and API routes.
+- `src/app/` Next.js app router pages, layout, and styles.
+- `src/components/simulator/` preview controller, chart, request side sheet, formatting/playback projections,
+  and clearly isolated hand-authored preview data. Replace the preview controller's data loading with
+  API responses when the server lane is ready; the chart and sheet already consume contract-shaped values.
 
-Status: M0 complete (scaffold and frozen contracts). Engine, seeded marketplace, API, and playback UI follow.
+Status: M0 complete; M4 UI preview chunk implemented on a separate worktree. Full M4 integration remains pending.
