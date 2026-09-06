@@ -11,36 +11,14 @@ const outcomes: Record<CandidateTrace["outcome"], string> = {
   excluded_shortlist: "Outside top ranks", excluded_reserve: "Below reserve",
 };
 
-export function RequestSheet({ trace, scenario, onClose, preview = false }: {
-  trace: RequestTrace; scenario: ScenarioSummary; onClose: () => void; preview?: boolean;
-}) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialog?.showModal();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      dialog?.close();
-      document.body.style.overflow = previousOverflow;
-      previous?.focus();
-    };
-  }, []);
+/** One mode's funnel plus its optional implementation-detail arithmetic. */
+function RequestColumn({ trace, scenario, label }: { trace: RequestTrace; scenario: ScenarioSummary; label: string }) {
   const name = (id: string | null) => scenario.campaigns.find(c => c.id === id)?.name ?? id ?? "None";
   return (
-    <dialog ref={dialogRef} className="request-sheet" aria-labelledby="request-heading"
-      onCancel={event => { event.preventDefault(); onClose(); }}
-      onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="sheet-inner">
-        <header className="sheet-header">
-          <div><p className="eyebrow">Inside one request · {trace.requestId}</p><h2 id="request-heading">{trace.query ?? trace.category}</h2></div>
-          <button className="icon-button" onClick={onClose} aria-label="Close request details" autoFocus>✕</button>
-        </header>
-        <p className="muted">Session {sessionTime(trace.timestampMs)} · {scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId} · {trace.category}</p>
-        {preview && <p className="notice compact">Preview walkthrough on the tiny fixture — real engine output, not the full baseline marketplace.</p>}
-        <RequestFunnel trace={trace} scenario={scenario} />
-        <details className="implementation-details">
+    <div className="request-column">
+      <p className="eyebrow">{label}</p>
+      <RequestFunnel trace={trace} scenario={scenario} />
+      <details className="implementation-details">
         <summary>Curious about the implementation?</summary>
         <p className="small muted">Expand a campaign for its quality, pacing decision, ranking, and budget arithmetic. Minimum quality ≥ {scenario.config.qualityThreshold}. Bids and prices are per impression.</p>
         {trace.candidates.map(candidate => (
@@ -51,7 +29,7 @@ export function RequestSheet({ trace, scenario, onClose, preview = false }: {
               <div><dt>1. Budget eligibility</dt><dd>{money(candidate.budgetBeforeMicros)} available · reserve {money(candidate.eligibility.reserveMicros)} · {candidate.eligibility.passed ? "passed" : "excluded"}</dd></div>
               <div><dt>2. Pacing</dt><dd>{candidate.pacing.evaluated ? <>
                 {candidate.pacing.pacingEnabled ? `${Math.round(candidate.pacing.probability * 100)}% admission chance` : "Off · 100% admission chance"} · {candidate.pacing.admitted ? "admitted" : "skipped"}
-                <small>Spend {money(candidate.pacing.spendSoFarMicros)} / target {money(candidate.pacing.targetMicros)}{!preview && ` · draw ${candidate.pacing.draw.toFixed(4)}`}</small>
+                <small>Spend {money(candidate.pacing.spendSoFarMicros)} / target {money(candidate.pacing.targetMicros)} · draw {candidate.pacing.draw.toFixed(4)}</small>
               </> : "Not evaluated: excluded earlier"}</dd></div>
               <div><dt>3. Quality</dt><dd>{candidate.scoring.evaluated ? <>
                 {candidate.scoring.base.toFixed(2)} engagement × {candidate.scoring.relevance.toFixed(2)} relevance (user × segment fit) = <strong>{candidate.scoring.quality.toFixed(3)}</strong>
@@ -69,8 +47,46 @@ export function RequestSheet({ trace, scenario, onClose, preview = false }: {
             </dl>
           </details>
         ))}
-        </details>
-        <p className="sheet-footnote">Quality decides who reaches the auction. Utility — bid times quality — decides who wins, and the winner is charged a price that reflects its own quality. Only campaigns eligible to win can support the price.</p>
+      </details>
+      <p className="sheet-footnote">Quality decides who reaches the auction. Utility — bid times quality — decides who wins, and the winner is charged a price that reflects its own quality. Only campaigns eligible to win can support the price.</p>
+    </div>
+  );
+}
+
+/** Side-by-side comparison: one column per pacing mode, at the same request. */
+export function RequestSheet({ off, on, scenario, onClose }: {
+  off: RequestTrace | null; on: RequestTrace | null; scenario: ScenarioSummary; onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const trace = off ?? on;
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog?.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previousOverflow;
+      previous?.focus();
+    };
+  }, []);
+  if (!trace) return null;
+  return (
+    <dialog ref={dialogRef} className="request-sheet request-sheet-wide" aria-labelledby="request-heading"
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="sheet-inner">
+        <header className="sheet-header">
+          <div><p className="eyebrow">Inside one request · {trace.requestId}</p><h2 id="request-heading">{trace.query ?? trace.category}</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close request details" autoFocus>✕</button>
+        </header>
+        <p className="muted">Session {sessionTime(trace.timestampMs)} · {scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId} · {trace.category}</p>
+        <p className="small muted">Same request, both pacing modes. Compare which campaign wins and why.</p>
+        <div className="request-columns">
+          {off && <RequestColumn trace={off} scenario={scenario} label="Pacing off" />}
+          {on && <RequestColumn trace={on} scenario={scenario} label="Pacing on" />}
+        </div>
       </div>
     </dialog>
   );

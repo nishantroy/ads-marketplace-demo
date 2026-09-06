@@ -1,10 +1,10 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import type { ApiError, RequestListItem, RequestListResponse, RequestTrace, RunListResponse, RunRecord, ScenarioResponse, ScenarioSummary, TimelineBucket, TimelineResponse } from "../../lib/contracts";
+import type { ApiError, RequestTrace, RunListResponse, RunRecord, ScenarioResponse, ScenarioSummary, TimelineBucket, TimelineResponse } from "../../lib/contracts";
 import { money, playbackFrame, sessionTime } from "./playback";
 import { RequestSheet } from "./request-sheet";
 
@@ -17,128 +17,327 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+type Step = "intro" | "unpaced" | "paced" | "compare" | "explore";
+const STEPS: { id: Step; label: string }[] = [
+  { id: "intro", label: "Start" },
+  { id: "unpaced", label: "Pacing off" },
+  { id: "paced", label: "Pacing on" },
+  { id: "compare", label: "Compare" },
+  { id: "explore", label: "Explore" },
+];
+
+interface MergedRequestRow {
+  requestId: string; timestampMs: number; category: string; query?: string; userId: string;
+  off?: { participantCount: number; winnerCampaignId: string | null; priceMicros: number; filled: boolean };
+  on?: { participantCount: number; winnerCampaignId: string | null; priceMicros: number; filled: boolean };
+}
+
 export function SimulatorPreview() {
   const [scenario, setScenario] = useState<ScenarioSummary | null>(null);
   const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [selectedMode, setSelectedMode] = useState(false);
+  const [timelines, setTimelines] = useState<Record<string, TimelineBucket[]>>({});
+  const [step, setStep] = useState<Step>("intro");
   const [cursor, setCursor] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(4);
-  const [nextPacing, setNextPacing] = useState(false);
-  const [timelines, setTimelines] = useState<Record<string, TimelineBucket[]>>({});
-  const [requestPage, setRequestPage] = useState<RequestListResponse | null>(null);
-  const [selectedTrace, setSelectedTrace] = useState<RequestTrace | null>(null);
-  const [loading, setLoading] = useState<"initial" | "run" | "reset" | null>("initial");
-  const [requestLoading, setRequestLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const selectedRun = runs.find(run => run.pacingEnabled === selectedMode);
-  const comparisonRun = runs.find(run => run.pacingEnabled !== selectedMode);
-  const isComparable = Boolean(selectedRun && comparisonRun && selectedRun.inputHash === comparisonRun.inputHash && selectedRun.engineVersion === comparisonRun.engineVersion);
-  const timeline = selectedRun ? timelines[selectedRun.id] ?? [] : [];
-  const comparisonTimeline = isComparable && comparisonRun ? timelines[comparisonRun.id] ?? [] : undefined;
-  const isPlaying = playing && cursor < timeline.length;
-  const frame = playbackFrame(timeline, cursor);
-  const duration = scenario?.config.sessionDurationMs ?? 0;
-  const campaignId = scenario?.campaigns[0]?.id;
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | undefined>();
-  const activeCampaignId = selectedCampaignId && scenario?.campaigns.some(c => c.id === selectedCampaignId) ? selectedCampaignId : campaignId;
-  const campaign = scenario?.campaigns.find(c => c.id === activeCampaignId);
-  const campaignMetrics = frame.latest?.campaigns.find(c => c.campaignId === activeCampaignId);
+  const [requestRows, setRequestRows] = useState<MergedRequestRow[]>([]);
+  const [requestTotal, setRequestTotal] = useState(0);
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [inspecting, setInspecting] = useState<{ off: RequestTrace | null; on: RequestTrace | null } | null>(null);
+  const [loading, setLoading] = useState<"initial" | "computing" | "reset" | null>("initial");
+  const [error, setError] = useState<string | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const computingRef = useRef(false);
 
+  const offRun = runs.find(r => !r.pacingEnabled) ?? null;
+  const onRun = runs.find(r => r.pacingEnabled) ?? null;
+  const bothReady = Boolean(offRun && onRun && timelines[offRun.id] && timelines[onRun.id]);
+  const offTimeline = offRun ? timelines[offRun.id] ?? [] : [];
+  const onTimeline = onRun ? timelines[onRun.id] ?? [] : [];
+  const timelineLength = Math.max(offTimeline.length, onTimeline.length);
+  const duration = scenario?.config.sessionDurationMs ?? 0;
+  const busy = loading !== null;
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(query.matches);
+    const listener = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
+  }, []);
+
+  // Load the scenario and whatever result pair already exists; nothing here requires a user decision.
   const refresh = async () => {
     const [scenarioResponse, runResponse] = await Promise.all([api<ScenarioResponse>("/api/scenario"), api<RunListResponse>("/api/runs")]);
     setScenario(scenarioResponse.scenario); setRuns(runResponse.runs);
-    const current = runResponse.runs.find(run => run.pacingEnabled === selectedMode) ?? runResponse.runs[0];
-    if (current) setSelectedMode(current.pacingEnabled);
   };
-
-  useEffect(() => { void refresh().catch(error => { setError(error.message); setLoading(null); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh().catch(error => { setError(error.message); setLoading(null); }); }, []);
   useEffect(() => { if (loading === "initial" && scenario) setLoading(null); }, [loading, scenario]);
+
+  // Compute both pacing modes automatically. There is no run button and no mode to choose.
   useEffect(() => {
-    if (!isPlaying) return;
-    const timer = window.setInterval(() => setCursor(value => Math.min(value + 1, timeline.length)), 1000 / speed);
-    return () => window.clearInterval(timer);
-  }, [isPlaying, speed, timeline.length]);
-  useEffect(() => { setCursor(0); setPlaying(false); setSelectedTrace(null); setRequestPage(null); }, [selectedRun?.id]);
+    if (!scenario || computingRef.current) return;
+    const haveOff = runs.some(r => !r.pacingEnabled);
+    const haveOn = runs.some(r => r.pacingEnabled);
+    if (haveOff && haveOn) return;
+    const modesToCompute = [...(haveOff ? [] : [false]), ...(haveOn ? [] : [true])];
+    computingRef.current = true;
+    setLoading("computing"); setError(null);
+    void Promise.all(modesToCompute.map(mode => api<{ run: RunRecord }>("/api/runs", { method: "POST", body: JSON.stringify({ pacingEnabled: mode }) })))
+      .then(responses => {
+        setRuns(previous => {
+          const next = [...previous];
+          for (const { run } of responses) {
+            const index = next.findIndex(item => item.pacingEnabled === run.pacingEnabled);
+            if (index >= 0) next[index] = run; else next.push(run);
+          }
+          return next;
+        });
+      })
+      .catch(error => setError(error instanceof Error ? error.message : "Unable to compute the comparison."))
+      .finally(() => { computingRef.current = false; setLoading(null); });
+  }, [scenario, runs]);
+
   useEffect(() => {
-    const targets = [selectedRun, isComparable ? comparisonRun : undefined].filter((run): run is RunRecord => Boolean(run && !timelines[run.id]));
+    const targets = [offRun, onRun].filter((run): run is RunRecord => Boolean(run && !timelines[run.id]));
     if (!targets.length) return;
     void Promise.all(targets.map(run => api<TimelineResponse>(`/api/runs/${run.id}/timeline`))).then(responses => {
       setTimelines(previous => ({ ...previous, ...Object.fromEntries(responses.map(response => [response.runId, response.buckets])) }));
     }).catch(error => setError(error.message));
-  }, [selectedRun, comparisonRun, isComparable, timelines]);
+  }, [offRun, onRun, timelines]);
+
   useEffect(() => {
-    if (!selectedRun || frame.cutoffMs === 0) { setRequestPage(null); return; }
-    let cancelled = false;
-    setRequestLoading(true);
-    void api<RequestListResponse>(`/api/runs/${selectedRun.id}/requests?limit=30&beforeMs=${frame.cutoffMs}`).then(page => {
-      if (!cancelled) setRequestPage(page);
-    }).catch(error => { if (!cancelled) setError(error.message); }).finally(() => { if (!cancelled) setRequestLoading(false); });
-    return () => { cancelled = true; };
-  }, [selectedRun, frame.cutoffMs]);
+    if (!playing) return;
+    const cap = step === "unpaced" ? offTimeline.length : step === "paced" ? onTimeline.length : timelineLength;
+    const timer = window.setInterval(() => setCursor(value => Math.min(value + 1, cap)), 1000 / speed);
+    return () => window.clearInterval(timer);
+  }, [playing, speed, step, offTimeline.length, onTimeline.length, timelineLength]);
 
-  const revenuePoints = [{ time: 0, value: 0 }, ...frame.visible.map(bucket => ({ time: bucket.endMs, value: bucket.cumulativeRevenueMicros }))];
-  const comparisonRevenuePoints = comparisonTimeline ? [{ time: 0, value: 0 }, ...comparisonTimeline.slice(0, cursor).map(bucket => ({ time: bucket.endMs, value: bucket.cumulativeRevenueMicros }))] : undefined;
-  const campaignPoints = [{ time: 0, value: 0, target: 0 }, ...frame.visible.map(bucket => {
-    const metrics = bucket.campaigns.find(item => item.campaignId === activeCampaignId);
-    return { time: bucket.endMs, value: metrics?.cumulativeSpendMicros ?? 0, target: metrics?.targetMicros ?? 0 };
-  })];
-  const comparisonCampaignPoints = comparisonTimeline ? [{ time: 0, value: 0 }, ...comparisonTimeline.slice(0, cursor).map(bucket => ({ time: bucket.endMs, value: bucket.campaigns.find(item => item.campaignId === activeCampaignId)?.cumulativeSpendMicros ?? 0 }))] : undefined;
-
-  function seek(value: number) { setCursor(value); setPlaying(false); setSelectedTrace(null); }
-  async function run(mode: boolean) {
-    setLoading("run"); setError(null); setPlaying(false);
-    try {
-      const response = await api<{ run: RunRecord }>("/api/runs", { method: "POST", body: JSON.stringify({ pacingEnabled: mode }) });
-      setRuns(previous => [...previous.filter(item => item.pacingEnabled !== mode), response.run].sort((a, b) => Number(a.pacingEnabled) - Number(b.pacingEnabled)));
-      setTimelines(previous => { const next = { ...previous }; delete next[response.run.id]; return next; });
-      setSelectedMode(mode); setNextPacing(mode);
-    } catch (error) { setError(error instanceof Error ? error.message : "Unable to run the simulation."); }
-    finally { setLoading(null); }
+  function goToStep(next: Step) {
+    setStep(next); setPlaying(false); setInspecting(null);
+    if (next === "unpaced") { setCursor(0); setPlaying(!reducedMotion); }
+    else if (next === "paced") { setCursor(0); setPlaying(!reducedMotion); }
+    else if (next === "compare" || next === "explore") { setCursor(timelineLength); }
   }
+  function seek(value: number) { setCursor(value); setPlaying(false); }
+
   async function reset() {
     setLoading("reset"); setError(null); setPlaying(false);
     try {
       const response = await api<{ scenario: ScenarioSummary }>("/api/scenario/reset", { method: "POST", body: "{}" });
-      setScenario(response.scenario); setRuns([]); setTimelines({}); setCursor(0); setRequestPage(null); setSelectedTrace(null);
+      setScenario(response.scenario); setRuns([]); setTimelines({}); setCursor(0); setStep("intro"); setInspecting(null); setRequestRows([]);
     } catch (error) { setError(error instanceof Error ? error.message : "Unable to reset the demo."); }
     finally { setLoading(null); }
   }
-  async function inspect(item: RequestListItem) {
-    if (!selectedRun) return;
+
+  const cutoffMs = playbackFrame(offTimeline, cursor).cutoffMs;
+  useEffect(() => {
+    if (step !== "explore" || !offRun || !onRun || cutoffMs === 0) { setRequestRows([]); setRequestTotal(0); return; }
+    let cancelled = false;
+    setRequestLoading(true);
+    const params = `limit=30&beforeMs=${cutoffMs}`;
+    void Promise.all([
+      api<{ items: MergedRequestRow["off"] extends undefined ? never : { requestId: string; timestampMs: number; category: string; query?: string; userId: string; participantCount: number; winnerCampaignId: string | null; priceMicros: number; filled: boolean }[]; total: number }>(`/api/runs/${offRun.id}/requests?${params}`),
+      api<{ items: { requestId: string; timestampMs: number; category: string; query?: string; userId: string; participantCount: number; winnerCampaignId: string | null; priceMicros: number; filled: boolean }[]; total: number }>(`/api/runs/${onRun.id}/requests?${params}`),
+    ]).then(([offPage, onPage]) => {
+      if (cancelled) return;
+      const onById = new Map(onPage.items.map(item => [item.requestId, item]));
+      const rows: MergedRequestRow[] = offPage.items.map(item => {
+        const match = onById.get(item.requestId);
+        return {
+          requestId: item.requestId, timestampMs: item.timestampMs, category: item.category, query: item.query, userId: item.userId,
+          off: { participantCount: item.participantCount, winnerCampaignId: item.winnerCampaignId, priceMicros: item.priceMicros, filled: item.filled },
+          on: match && { participantCount: match.participantCount, winnerCampaignId: match.winnerCampaignId, priceMicros: match.priceMicros, filled: match.filled },
+        };
+      });
+      setRequestRows(rows); setRequestTotal(offPage.total);
+    }).catch(error => { if (!cancelled) setError(error.message); }).finally(() => { if (!cancelled) setRequestLoading(false); });
+    return () => { cancelled = true; };
+  }, [step, offRun, onRun, cutoffMs]);
+
+  async function inspect(requestId: string) {
+    if (!offRun || !onRun) return;
     setPlaying(false); setError(null);
-    try { setSelectedTrace((await api<{ trace: RequestTrace }>(`/api/runs/${selectedRun.id}/requests/${item.requestId}`)).trace); }
-    catch (error) { setError(error instanceof Error ? error.message : "Unable to load that request."); }
+    try {
+      const [offResponse, onResponse] = await Promise.all([
+        api<{ trace: RequestTrace }>(`/api/runs/${offRun.id}/requests/${requestId}`),
+        api<{ trace: RequestTrace }>(`/api/runs/${onRun.id}/requests/${requestId}`),
+      ]);
+      setInspecting({ off: offResponse.trace, on: onResponse.trace });
+    } catch (error) { setError(error instanceof Error ? error.message : "Unable to load that request."); }
   }
+
+  // --- Chart series -----------------------------------------------------
+  const cumulative = (timeline: TimelineBucket[], upto: number) => {
+    const frame = playbackFrame(timeline, upto);
+    return [{ time: 0, value: 0 }, ...frame.visible.map(bucket => ({ time: bucket.endMs, value: bucket.cumulativeRevenueMicros }))];
+  };
+  const metric = (timeline: TimelineBucket[], upto: number, pick: (bucket: TimelineBucket) => number | null) =>
+    playbackFrame(timeline, upto).visible.map(bucket => ({ time: bucket.endMs, value: pick(bucket) }));
+  const campaignSeries = (timeline: TimelineBucket[], upto: number, campaignId: string | undefined, withTarget: boolean) => {
+    const frame = playbackFrame(timeline, upto);
+    return [{ time: 0, value: 0, target: withTarget ? 0 : undefined }, ...frame.visible.map(bucket => {
+      const metrics = bucket.campaigns.find(item => item.campaignId === campaignId);
+      return { time: bucket.endMs, value: metrics?.cumulativeSpendMicros ?? 0, target: withTarget ? metrics?.targetMicros ?? 0 : undefined };
+    })];
+  };
+
+  const totalBudget = scenario?.campaigns.reduce((sum, c) => sum + c.budgetMicros, 0);
+  const campaignId = selectedCampaignId && scenario?.campaigns.some(c => c.id === selectedCampaignId) ? selectedCampaignId : scenario?.campaigns[0]?.id;
+  const campaign = scenario?.campaigns.find(c => c.id === campaignId);
+  const offRevenue = playbackFrame(offTimeline, cursor).revenueMicros;
+  const onRevenue = playbackFrame(onTimeline, cursor).revenueMicros;
+
+  let heroPoints, heroComparisonPoints, heroLabel, heroComparisonLabel;
+  if (step === "unpaced") {
+    heroPoints = cumulative(offTimeline, cursor); heroLabel = "Pacing off";
+  } else if (step === "paced") {
+    heroPoints = cumulative(onTimeline, cursor); heroLabel = "Pacing on";
+    heroComparisonPoints = cumulative(offTimeline, offTimeline.length); heroComparisonLabel = "Pacing off (complete)";
+  } else {
+    heroPoints = cumulative(offTimeline, cursor); heroLabel = "Pacing off";
+    heroComparisonPoints = cumulative(onTimeline, cursor); heroComparisonLabel = "Pacing on";
+  }
+
+  const stepIndex = STEPS.findIndex(item => item.id === step);
   const campaignName = (id: string | null) => scenario?.campaigns.find(c => c.id === id)?.name ?? "No ad served";
-  const modeName = (mode: boolean) => mode ? "Pacing on" : "Pacing off";
-  const busy = loading !== null;
 
   return <div className="simulator-app">
     <a href="#workspace" className="skip-link">Skip to simulator</a>
-    <header className="app-header"><Link className="brand" href="/" aria-label="Ad Market Lab home"><span className="brand-mark" aria-hidden="true">▥</span><span>Ad Market <b>Lab</b></span></Link><span className="header-divider" /><span className="header-description">A small marketplace. A closer look.</span><a href="#demo-guide" className="guide-link">How to explore <span aria-hidden="true">↗</span></a></header>
+    <header className="app-header">
+      <Link className="brand" href="/" aria-label="Ad Market Lab home"><span className="brand-mark" aria-hidden="true">▥</span><span>Ad Market <b>Lab</b></span></Link>
+      <span className="header-divider" /><span className="header-description">A small marketplace. A closer look.</span>
+      <button className="text-button reset-link" disabled={busy} onClick={() => void reset()}>{loading === "reset" ? "Resetting…" : "Reset demo"}</button>
+    </header>
     <main id="workspace" className="workspace">
-      <div className="page-heading"><div><p className="eyebrow">Search ads · marketplace simulator</p><h1>See where the ad dollars go.</h1><p className="lede">What changes when advertisers spread their spending over time?</p></div><span className="badge neutral">Live local demo</span></div>
       {error && <div className="notice error-notice" role="alert"><strong>Something needs attention</strong><span>{error}</span><button className="text-button" onClick={() => setError(null)}>Dismiss</button></div>}
-      <div className="workspace-grid"><aside className="sidebar"><section className="panel session-panel" aria-labelledby="session-title"><div className="experiment-bar"><div><h2 id="session-title">Run the same marketplace twice</h2><p className="small muted">{scenario ? `${scenario.requestCount.toLocaleString()} requests · ${scenario.campaigns.length} campaigns · 6 hours` : "Loading scenario…"}</p></div><button className="button primary" disabled={busy || !scenario} onClick={() => run(nextPacing)}>{loading === "run" ? "Running…" : `Run with pacing ${nextPacing ? "on" : "off"} →`}</button></div>
-        <details className="settings-disclosure"><summary>Scenario & next-run settings</summary><div className="settings-content"><dl className="scenario-facts"><div><dt>Campaigns / users</dt><dd>{scenario ? `${scenario.campaigns.length} / ${scenario.users.length}` : "—"}</dd></div><div><dt>Categories / segments</dt><dd>{scenario ? `${scenario.categories.length} / ${scenario.segments.length}` : "—"}</dd></div><div><dt>Minimum price</dt><dd>{scenario ? `${money(scenario.config.reserveMicros)} per impression` : "—"}</dd></div></dl><div className="pacing-setting"><label className="switch-row" htmlFor="pacing-switch"><span><strong>Budget pacing</strong><small>For the next run</small></span><input id="pacing-switch" type="checkbox" role="switch" checked={nextPacing} onChange={event => setNextPacing(event.target.checked)} /></label><p>Preserve some budget for later by skipping opportunities while ahead of target.</p></div><div><button className="button secondary" disabled={busy} onClick={() => void reset()}>{loading === "reset" ? "Resetting…" : "Reset live demo"}</button><p className="small muted">Reset clears both current results. A server restart also clears them.</p></div></div></details>
-      </section></aside><div className="main-column"><section className="panel playback-panel" aria-labelledby="playback-title"><div className="section-heading"><div><p className="eyebrow">Replay the session</p><h2 id="playback-title">Marketplace over time</h2></div><span className={`badge ${selectedRun ? "green" : "neutral"}`}>{selectedRun ? modeName(selectedRun.pacingEnabled) : "No result yet"}</span></div>
-        <div className="mode-switch" aria-label="Result to view"><button className={selectedMode === false ? "active" : ""} disabled={!runs.some(run => !run.pacingEnabled)} onClick={() => setSelectedMode(false)}>Pacing off</button><button className={selectedMode === true ? "active" : ""} disabled={!runs.some(run => run.pacingEnabled)} onClick={() => setSelectedMode(true)}>Pacing on</button>{isComparable && <span>Same inputs · shared cursor</span>}</div>
-        <div className="playback-controls"><button className="button primary" disabled={!selectedRun || !timeline.length} onClick={() => { if (cursor === timeline.length) setCursor(0); setPlaying(value => !value); }}>{isPlaying ? "Ⅱ Pause" : "▶ Play"}</button><button className="icon-button" disabled={!selectedRun} onClick={() => seek(0)} aria-label="Restart playback">↺</button><div className="clock"><strong>{sessionTime(frame.cutoffMs)}</strong><span> / 06:00 elapsed</span></div><label className="speed-label">Speed <select value={speed} onChange={event => setSpeed(Number(event.target.value))}><option value={1}>1×</option><option value={4}>4×</option><option value={12}>12×</option></select></label></div>
-        <input aria-label="Completed five-minute playback buckets" className="time-slider" type="range" min={0} max={timeline.length} value={cursor} disabled={!selectedRun} onChange={event => seek(Number(event.target.value))} /><div className="playback-caption"><span>00:00</span><span>{frame.requests.toLocaleString()} / {scenario?.requestCount.toLocaleString() ?? "—"} requests replayed · five-minute steps</span><span>06:00</span></div>
-      </section>
-      {!selectedRun ? <section className="panel empty-state"><div className="empty-symbol" aria-hidden="true">↗</div><h2>Run without pacing first.</h2><p>Then switch pacing on and run the identical marketplace again. The charts will compare the two current results at the same simulated time.</p><button className="button secondary" disabled={busy || !scenario} onClick={() => void run(false)}>Run without pacing →</button></section> : <>
-        <section className="panel chart-panel hero-chart"><div className="section-heading"><div><h3>How much has the marketplace earned?</h3><p className="revenue-total">{money(frame.revenueMicros)}</p><p className="small muted">{modeName(selectedMode)} · cumulative through {sessionTime(frame.cutoffMs)}</p></div><span className="legend"><i />Solid: {modeName(selectedMode)}{isComparable && " · dashed: other mode"}</span></div><TimelineChart points={revenuePoints} comparisonPoints={comparisonRevenuePoints} durationMs={duration} label={modeName(selectedMode)} comparisonLabel={isComparable ? modeName(!selectedMode) : undefined} maxValue={scenario!.campaigns.reduce((sum, campaign) => sum + campaign.budgetMicros, 0)} cumulative /><p className="chart-caption">Every advertiser charge adds to marketplace revenue. Both modes use the same request stream; pacing does not promise more revenue.</p></section>
-        <Disclosure title="Follow one campaign" description="See how its spend tracks the same budget in each mode."><section className="chart-panel"><div className="section-heading"><div><h3>Campaign spend</h3><select aria-label="Campaign to chart" className="campaign-select" value={activeCampaignId} onChange={event => setSelectedCampaignId(event.target.value)}>{scenario!.campaigns.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></div><span className="badge neutral">{campaign?.objective}</span></div><TimelineChart points={campaignPoints} comparisonPoints={comparisonCampaignPoints} durationMs={duration} label={modeName(selectedMode)} comparisonLabel={isComparable ? modeName(!selectedMode) : undefined} target maxValue={campaign?.budgetMicros} cumulative /><p className="chart-caption">{money(campaignMetrics?.cumulativeSpendMicros ?? 0)} of {money(campaign?.budgetMicros ?? 0)} budget · dotted: linear target</p></section></Disclosure>
-        <Disclosure title="Why do impression prices change?" description="Explore auction competition and the price paid for an ad slot."><p className="disclosure-intro">When bidders leave, the remaining winner may pay less. Pacing can preserve later competition, but does not guarantee higher revenue.</p><div className="chart-grid small-charts"><section className="chart-panel"><h3>How many campaigns compete?</h3><p className="small muted">Average participants per request · each bucket</p><TimelineChart points={frame.visible.map(bucket => ({ time: bucket.endMs, value: bucket.avgParticipants }))} durationMs={duration} label="Auction participants" monetary={false} maxValue={scenario!.config.shortlistSize} /></section><section className="chart-panel"><h3>What does an impression cost?</h3><p className="small muted">Average price over filled slots · each bucket</p><TimelineChart points={frame.visible.map(bucket => ({ time: bucket.endMs, value: bucket.avgClearingPriceMicros }))} durationMs={duration} label="Clearing price" maxValue={Math.max(...scenario!.campaigns.map(c => c.bidMicros))} /></section></div><p className="disclosure-intro small muted">Gaps mean no observations—not a zero price.</p></Disclosure>
-        <Disclosure title="Inspect a request" description={requestPage ? `${requestPage.total.toLocaleString()} revealed requests · follow one from category match to auction winner.` : "Move the playback cursor forward to reveal current requests."}><section className="requests-panel" aria-label="Request explorer"><div className="section-heading"><h3>Request explorer</h3><span className="small muted">Before {sessionTime(frame.cutoffMs)}</span></div>{requestLoading ? <p className="table-empty">Loading current requests…</p> : !requestPage?.items.length ? <p className="table-empty">No requests revealed yet. Play or move the timeline forward.</p> : <div className="table-scroll"><table><thead><tr><th>Time / request</th><th>Search</th><th>Bidders</th><th>Winner / price</th><th><span className="sr-only">Details</span></th></tr></thead><tbody>{requestPage.items.map(item => <tr key={item.requestId}><td><strong className="mono">{sessionTime(item.timestampMs)}</strong><small>{item.requestId}</small></td><td><strong>{item.query ?? item.category}</strong><small>{item.category} · {item.userId}</small></td><td><span className="bidder-count">{item.participantCount}</span></td><td><strong>{campaignName(item.winnerCampaignId)}</strong><small>{item.filled ? money(item.priceMicros) : "No charge"}</small></td><td><button className="inspect-button" onClick={() => void inspect(item)}>Inspect ↗</button></td></tr>)}</tbody></table></div>}<div className="table-footer"><span>{requestPage ? `Showing first ${requestPage.items.length} of ${requestPage.total.toLocaleString()} revealed requests` : "No current requests"}</span></div></section></Disclosure>
-        <details className="run-metadata"><summary>Current-result provenance</summary><p>{selectedRun.scenarioVersion} · engine {selectedRun.engineVersion} · current live result only</p><code>{selectedRun.inputHash}</code></details>
-      </>}</div></div>
-      <Disclosure title="How to explore this experiment" description="The high-level story, plus optional implementation details." id="demo-guide"><div className="guide-content"><ol><li><strong>Run without pacing.</strong> Watch budgets spend, then inspect a request.</li><li><strong>Turn pacing on and run again.</strong> The paired charts share requests, budget inputs, and cursor.</li><li><strong>Ask why.</strong> Open a request funnel to see quality gating, utility ranking, and the auction.</li></ol><p>Quality determines who reaches the auction. Utility—effective bid × quality—determines the winner. All objectives pay per impression.</p><details className="formula"><summary>Implementation detail: the pacing formula</summary><code>target = budget × elapsed / duration<br />p = clamp((target − spent) / bid, 0, 1)</code><p>A fixed draw below p admits the campaign. Skipped campaigns cannot win or support prices.</p></details></div></Disclosure>
+
+      <nav className="step-nav" aria-label="Guide progress">
+        {STEPS.map((item, index) => <button key={item.id} className={`step-pill ${item.id === step ? "active" : ""} ${index < stepIndex ? "done" : ""}`}
+          onClick={() => goToStep(item.id)} disabled={!scenario} aria-current={item.id === step ? "step" : undefined}>
+          <span className="step-pill-index">{index + 1}</span><span className="step-pill-label">{item.label}</span>
+        </button>)}
+      </nav>
+
+      {step === "intro" && <section className="panel intro-card">
+        <p className="eyebrow">Search ads · marketplace simulator</p>
+        <h1>What changes when advertisers spread their spending over time?</h1>
+        <p className="lede">This demo replays the identical six-hour marketplace twice: once with advertiser budgets free to spend
+          as fast as they can win, and once with pacing holding some budget back for later. Watch each play out, then compare
+          them side by side.</p>
+        {!bothReady ? <p className="notice compact">{loading === "computing" ? "Computing both runs…" : "Loading scenario…"}</p> : <p className="small muted">
+          {scenario?.requestCount.toLocaleString()} requests · {scenario?.campaigns.length} campaigns · {scenario?.categories.length} categories · 6 simulated hours.
+          Both results are already computed — there is nothing to configure or run.
+        </p>}
+        <div className="step-actions"><button className="button primary" disabled={!bothReady} onClick={() => goToStep("unpaced")}>Begin →</button></div>
+      </section>}
+
+      {step !== "intro" && <>
+        <section className="panel chart-panel hero-chart" aria-live="polite">
+          <div className="section-heading">
+            <div>
+              <h3>{step === "unpaced" ? "Pacing off: budgets spend as fast as they can win"
+                : step === "paced" ? "Now the same marketplace, with pacing on"
+                : "Marketplace revenue, both modes"}</h3>
+              <p className="revenue-total">{step === "paced" ? money(onRevenue) : money(offRevenue)}</p>
+              <p className="small muted">
+                {step === "unpaced" && "Pacing off · cumulative through " + sessionTime(cutoffMs)}
+                {step === "paced" && "Pacing on · cumulative through " + sessionTime(playbackFrame(onTimeline, cursor).cutoffMs) + " · gray line is the completed pacing-off run"}
+                {(step === "compare" || step === "explore") && `Both modes · same requests, same budgets · through ${sessionTime(cutoffMs)}`}
+              </p>
+            </div>
+            <span className="legend"><i />{heroLabel}{heroComparisonLabel && ` · dashed: ${heroComparisonLabel}`}</span>
+          </div>
+          <TimelineChart points={heroPoints} comparisonPoints={heroComparisonPoints} durationMs={duration} label={heroLabel}
+            comparisonLabel={heroComparisonLabel} maxValue={totalBudget} cumulative />
+          <p className="chart-caption">Every advertiser charge adds to marketplace revenue. Pacing does not promise more of it.</p>
+        </section>
+
+        <div className="playback-controls">
+          <button className="button primary" disabled={!bothReady} onClick={() => { const cap = step === "unpaced" ? offTimeline.length : step === "paced" ? onTimeline.length : timelineLength; if (cursor >= cap) setCursor(0); setPlaying(value => !value); }}>
+            {playing ? "Ⅱ Pause" : "▶ Play"}
+          </button>
+          <button className="icon-button" disabled={!bothReady} onClick={() => seek(0)} aria-label="Restart playback">↺</button>
+          <div className="clock"><strong>{sessionTime(cutoffMs)}</strong><span> / 06:00 elapsed</span></div>
+          <label className="speed-label">Speed <select value={speed} onChange={event => setSpeed(Number(event.target.value))}><option value={1}>1×</option><option value={4}>4×</option><option value={12}>12×</option></select></label>
+        </div>
+        <input aria-label="Playback position" className="time-slider" type="range" min={0} max={timelineLength} value={cursor} disabled={!bothReady} onChange={event => seek(Number(event.target.value))} />
+
+        {step === "compare" && <section className="panel compare-callout">
+          <h3>What changed</h3>
+          <p>Pacing off finished with <strong>{money(offRevenue)}</strong> in revenue; pacing on finished with <strong>{money(onRevenue)}</strong>.
+            {" "}Both modes spend from the same budgets against the same requests — pacing only changes <em>when</em> that spend happens, which
+            is why revenue can end up close either way. Open Explore to see the effect on competition and clearing prices.</p>
+        </section>}
+
+        <div className="step-actions">
+          {stepIndex > 1 && <button className="button secondary" onClick={() => goToStep(STEPS[stepIndex - 1].id)}>← Back</button>}
+          {stepIndex < STEPS.length - 1 && <button className="button primary" disabled={!bothReady} onClick={() => goToStep(STEPS[stepIndex + 1].id)}>
+            {step === "unpaced" ? "Next: turn pacing on →" : step === "paced" ? "Next: compare →" : "Next: explore freely →"}
+          </button>}
+        </div>
+      </>}
+
+      {step === "explore" && <>
+        <Disclosure title="Follow one campaign" description="See how its spend tracks the same budget in each mode.">
+          <section className="chart-panel"><div className="section-heading"><div><h3>Campaign spend</h3>
+            <select aria-label="Campaign to chart" className="campaign-select" value={campaignId} onChange={event => setSelectedCampaignId(event.target.value)}>
+              {scenario?.campaigns.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}
+            </select></div><span className="badge neutral">{campaign?.objective}</span></div>
+            <TimelineChart points={campaignSeries(offTimeline, cursor, campaignId, true)} comparisonPoints={campaignSeries(onTimeline, cursor, campaignId, false)}
+              durationMs={duration} label="Pacing off" comparisonLabel="Pacing on" target maxValue={campaign?.budgetMicros} cumulative />
+            <p className="chart-caption">Solid: pacing off · dashed: pacing on · dotted: linear target · {money(campaign?.budgetMicros ?? 0)} budget</p>
+          </section>
+        </Disclosure>
+        <Disclosure title="Why do impression prices change?" description="Explore auction competition and the price paid for an ad slot.">
+          <p className="disclosure-intro">When bidders leave, the remaining winner may pay less. Pacing can preserve later competition, but does not guarantee higher revenue.</p>
+          <div className="chart-grid small-charts">
+            <section className="chart-panel"><h3>How many campaigns compete?</h3><p className="small muted">Average participants per request · each bucket</p>
+              <TimelineChart points={metric(offTimeline, cursor, b => b.avgParticipants)} comparisonPoints={metric(onTimeline, cursor, b => b.avgParticipants)}
+                durationMs={duration} label="Pacing off" comparisonLabel="Pacing on" monetary={false} maxValue={scenario?.config.shortlistSize} /></section>
+            <section className="chart-panel"><h3>What does an impression cost?</h3><p className="small muted">Average price over filled slots · each bucket</p>
+              <TimelineChart points={metric(offTimeline, cursor, b => b.avgClearingPriceMicros)} comparisonPoints={metric(onTimeline, cursor, b => b.avgClearingPriceMicros)}
+                durationMs={duration} label="Pacing off" comparisonLabel="Pacing on" maxValue={scenario ? Math.max(...scenario.campaigns.map(c => c.bidMicros)) : undefined} /></section>
+          </div>
+          <p className="disclosure-intro small muted">Gaps mean no observations—not a zero price.</p>
+        </Disclosure>
+        <Disclosure title="Inspect a request" description={requestRows.length ? `${requestTotal.toLocaleString()} revealed requests · compare both modes on the same request.` : "Move the playback cursor forward to reveal current requests."}>
+          <section className="requests-panel" aria-label="Request explorer">
+            <div className="section-heading"><h3>Request explorer</h3><span className="small muted">Before {sessionTime(cutoffMs)}</span></div>
+            {requestLoading ? <p className="table-empty">Loading current requests…</p> : !requestRows.length ? <p className="table-empty">No requests revealed yet. Play or move the timeline forward.</p> : <div className="table-scroll"><table>
+              <thead><tr><th>Time / request</th><th>Search</th><th>Pacing off</th><th>Pacing on</th><th><span className="sr-only">Details</span></th></tr></thead>
+              <tbody>{requestRows.map(row => <tr key={row.requestId}>
+                <td><strong className="mono">{sessionTime(row.timestampMs)}</strong><small>{row.requestId}</small></td>
+                <td><strong>{row.query ?? row.category}</strong><small>{row.category} · {row.userId}</small></td>
+                <td><strong>{campaignName(row.off?.winnerCampaignId ?? null)}</strong><small>{row.off?.filled ? money(row.off.priceMicros) : "No charge"} · {row.off?.participantCount ?? 0} bidders</small></td>
+                <td><strong>{campaignName(row.on?.winnerCampaignId ?? null)}</strong><small>{row.on?.filled ? money(row.on.priceMicros) : "No charge"} · {row.on?.participantCount ?? 0} bidders</small></td>
+                <td><button className="inspect-button" onClick={() => void inspect(row.requestId)}>Inspect ↗</button></td>
+              </tr>)}</tbody>
+            </table></div>}
+            <div className="table-footer"><span>{requestRows.length ? `Showing first ${requestRows.length} of ${requestTotal.toLocaleString()} revealed requests` : "No current requests"}</span></div>
+          </section>
+        </Disclosure>
+        <Disclosure title="About this scenario" description="Campaigns, users, and the minimum price, for the curious.">
+          <dl className="scenario-facts"><div><dt>Campaigns / users</dt><dd>{scenario ? `${scenario.campaigns.length} / ${scenario.users.length}` : "—"}</dd></div>
+            <div><dt>Categories / segments</dt><dd>{scenario ? `${scenario.categories.length} / ${scenario.segments.length}` : "—"}</dd></div>
+            <div><dt>Minimum price</dt><dd>{scenario ? `${money(scenario.config.reserveMicros)} per impression` : "—"}</dd></div></dl>
+          <details className="formula"><summary>Implementation detail: the pacing formula</summary>
+            <code>target = budget × elapsed / duration<br />p = clamp((target − spent) / bid, 0, 1)</code>
+            <p>A fixed draw below p admits the campaign. Skipped campaigns cannot win or support prices.</p></details>
+        </Disclosure>
+      </>}
+
+      <Disclosure title="How to explore this experiment" description="The high-level story, plus optional implementation details." id="demo-guide">
+        <div className="guide-content"><ol>
+          <li><strong>Watch pacing off.</strong> Budgets spend as fast as they can win.</li>
+          <li><strong>Watch pacing on.</strong> The same campaigns, budgets, and requests — only pacing differs.</li>
+          <li><strong>Compare, then explore.</strong> Open a request funnel to see quality gating, utility ranking, and the auction, side by side for both modes.</li>
+        </ol><p>Quality determines who reaches the auction. Utility—effective bid × quality—determines the winner. All objectives pay per impression.</p></div>
+      </Disclosure>
       <footer className="app-footer"><span>Ad Market Lab · Learn the mechanism, not a revenue promise.</span><span>One slot. Impression billing. Replayable inputs.</span></footer>
     </main>
-    {selectedTrace && scenario && <RequestSheet trace={selectedTrace} scenario={scenario} onClose={() => setSelectedTrace(null)} />}
+    {inspecting && scenario && <RequestSheet off={inspecting.off} on={inspecting.on} scenario={scenario} onClose={() => setInspecting(null)} />}
   </div>;
 }
 

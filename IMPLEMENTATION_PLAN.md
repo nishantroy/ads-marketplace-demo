@@ -243,16 +243,17 @@ Playback contract: five-minute buckets (72 points), with metrics advancing at bu
 
 Gate (prototype): manual browser check that controls, error/empty states, matched overlays, and the side sheet work; playback never mutates results; requests do not leak beyond the cursor; a side sheet agrees with its persisted trace. Changing the pacing toggle affects the next run, never relabels the displayed run. Automated UI tests are deferred.
 
-### Interaction redesign (confirmed, not yet implemented)
+### Interaction redesign (implemented 2026-09-06)
 
-Supersedes the pacing toggle and manual Run button above. The human's 2026-09-06 decision, documented in
-[docs/ui-design-principles.md](docs/ui-design-principles.md#guided-narrative-interaction-pattern-confirmed-2026-09-06):
-both modes compute automatically with no user decision point, a short click-through sequence (intro,
-unpaced, paced, comparison, explore) replaces the always-on dashboard, competing-campaign-count and
-clearing-price get their own synced-pair charts revealed on request, request inspection becomes two
-side-by-side funnel panels instead of a single mode-switched one, and one shared cursor scrubs both runs
-from the comparison step onward. This is a presentation redesign only; it does not change the API, the
-engine, or the shipped M4 data-fetching behavior above. Implementation is a follow-up chunk, not done here.
+Supersedes the pacing toggle and manual Run button above. Implements the human's 2026-09-06 decision,
+documented in [docs/ui-design-principles.md](docs/ui-design-principles.md#guided-narrative-interaction-pattern-confirmed-2026-09-06):
+both modes compute automatically on load and after reset, with no user decision point; a five-step
+click-through sequence (start, pacing off, pacing on, compare, explore) replaces the always-on dashboard;
+competing-campaign-count and clearing-price got their own synced-pair charts, revealed in Explore; request
+inspection is now two side-by-side funnel panels (one per mode) for the same request, replacing the single
+mode-switched sheet; and one shared cursor scrubs both runs together from the comparison step onward. This
+is a presentation redesign; it does not change the API or the engine. See the chunk log entry below for
+paths and checks.
 
 ## M5 — End-to-end verification and handoff
 
@@ -434,3 +435,13 @@ Remaining blockers / next owner:
 - Result: all invariants pass. Unpaced spends $675 of $2,126 in hour one and ends with no filled auctions in the final hour (median campaign exhaustion 3h40); paced fills 631 of 658 final-hour requests. Both modes retain at least 90% of campaigns at 95% budget delivery (32 off, 31 on). Revenue is $2,126.01 off / $2,113.68 on; no direction is asserted.
 - Validation: `npm test` (55/55), `npm run diagnose` (9/9 diagnostics), typecheck, lint, and build passed. Diagnostics report regenerated at `docs/m2-diagnostics.md`.
 
+
+### Guided-narrative UI redesign chunk
+
+- Date / task / owner: 2026-09-06 / implement the confirmed guided-narrative interaction pattern / Claude (coordinating assistant).
+- Paths: `src/components/simulator/simulator-preview.tsx` (rewritten), `src/components/simulator/request-sheet.tsx` (rewritten for side-by-side panels), `src/app/globals.css` (new step-nav/intro/compare/request-column styles; removed rules for the deleted toggle/mode-switch/settings-panel/empty-state markup), `docs/ui-design-principles.md`, `IMPLEMENTATION_PLAN.md`. Deleted `src/components/simulator/preview-data.ts` (dead code once the live API wiring landed; nothing imported it).
+- What changed: both pacing modes now compute automatically on load and after reset, with no toggle or Run button. A `step` state (`intro` → `unpaced` → `paced` → `compare` → `explore`) controls what's revealed on one continuously-available hero chart: `unpaced` shows only the pacing-off line animating in; `paced` freezes pacing-off as a dashed reference and animates pacing-on in from zero; `compare` shows both fully drawn with a plain-language delta callout; `explore` hands off to free scrubbing plus the existing secondary disclosures (campaign spend, competing-campaign-count and clearing-price as new synced-pair charts, and a merged request explorer). A shared `cursor` drives all of it; only its cap and which series follow it change per step. Request inspection now fetches both modes' traces for one request and renders two `<RequestFunnel>` panels side by side in a widened sheet, replacing the old single-mode sheet with a `preview` flag.
+- Not changed: the API, the engine, and the funnel/auction copy already reconciled in earlier chunks. `RequestFunnel` itself is untouched; only its container changed.
+- Commands run and outcomes: `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 55/55 passed (unaffected — this chunk is UI-only); `npm run build` OK (static home route, dynamic API routes unaffected).
+- Decisions / deviations: pacing auto-computation is guarded by a ref flag against duplicate POSTs from React Strict Mode's double-invoked effects in development. Step pills are always clickable (no gating on data readiness beyond the initial load), matching the design doc's "nothing is locked behind the sequence." Manual browser verification was intentionally not performed in this chunk, per the human's standing instruction to own UI testing themselves; only the automated checks above were run.
+- Remaining blockers / next owner: human visual review of the new flow. No automated UI/playback tests exist, consistent with the project's light-verification preference.

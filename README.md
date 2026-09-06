@@ -145,21 +145,32 @@ playback UI arrive in later milestones.
 
 ### Run the live UI demo
 
-Start the app, then use **Run with pacing off**. Switch pacing on and run again to replay the identical
-4,000-request marketplace. The overview overlays the two current results at the same simulated cursor:
-solid is the selected mode and dashed is the other mode. Runs are comparable only when their displayed
-input hash and engine version match.
+There is nothing to configure or run: opening the app computes both the pacing-off and pacing-on results
+over the identical 4,000-request marketplace automatically, and a five-step guide reveals them.
 
-Expand **Follow one campaign** for spend against the same budget, **Why do impression prices change?** for
-competition/price charts, or **Inspect a request** for current request rows and a side sheet (Escape closes
-it). The side sheet follows a connected funnel: **Category matches → Budget eligibility → Pacing admission
-→ Quality gate and utility ranking → Auction → Winner**. It uses a server-recorded trace and never reruns
-the engine in the browser.
+1. **Start** — a short framing card with the question the demo answers, and how big the scenario is.
+2. **Pacing off** — the revenue chart animates in alone, so you see the unpaced baseline first.
+3. **Pacing on** — pacing off freezes as a dashed reference and the pacing-on line animates in from zero
+   on the same chart.
+4. **Compare** — both lines shown complete, with a plain-language readout of what changed.
+5. **Explore** — the guide steps back and hands you the instrument panel: play/pause/scrub/speed, **Follow
+   one campaign** for spend against the same budget, **Why do impression prices change?** for
+   competing-campaign-count and clearing-price as paired off/on charts, and **Inspect a request** for a
+   merged request list.
+
+The step pills at the top are always clickable — nothing is gated behind watching a step play out, and you
+can jump to Explore immediately. From Compare onward, one shared cursor scrubs both runs together, so
+scrubbing shows how each mode was doing at the same simulated moment.
+
+Inspecting a request opens both modes' funnels side by side for the same request: **Category matches →
+Budget eligibility → Pacing admission → Quality gate and utility ranking → Auction → Winner**, so you can
+see the same moment play out differently under each mode. Every panel uses a server-recorded trace and
+never reruns the engine in the browser.
 
 Only completed five-minute buckets and requests strictly before the cursor are visible. Price-chart gaps
 mean no filled impressions, not free ones. The request list intentionally shows the first 30 revealed rows;
-this live demo has no historical request browser. **Reset live demo** clears both current results; a server
-restart does too.
+this live demo has no historical request browser. **Reset demo**, in the header, clears both current
+results and returns to Start; a server restart does too.
 
 Charts use **amCharts 5**. Chart roots are created only in the browser and disposed on unmount; playback
 updates data without recreating the chart. Default amCharts attribution is retained, and its original
@@ -170,7 +181,8 @@ Automated browser testing remains deferred. For now validation is typecheck, lin
 manual review.
 
 What exists today: shared types, pure engine, seeded marketplace and paired diagnostics, invariant checker,
-live-demo API endpoints, and a UI wired to the current pacing-on/off pair.
+live-demo API endpoints, and a guided UI wired to the current pacing-on/off pair. The interaction pattern is
+documented in [docs/ui-design-principles.md](docs/ui-design-principles.md#guided-narrative-interaction-pattern-confirmed-2026-09-06).
 
 ## Layout
 
@@ -178,8 +190,8 @@ live-demo API endpoints, and a UI wired to the current pacing-on/off pair.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
 - `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
 - `src/app/` Next.js app router pages, layout, styles, and API routes.
-- `src/components/simulator/` live playback controller, amCharts views, and request side sheet/funnel.
-  `preview-data.ts` is no longer used by the page and can be removed in a later cleanup.
+- `src/components/simulator/` the guided-narrative controller, amCharts views, and the side-by-side
+  request sheet/funnel.
 - `src/lib/server/` two-slot live state, input validation, engine adapter, and API service.
 
 ## UI design direction
@@ -189,5 +201,5 @@ live-demo API endpoints, and a UI wired to the current pacing-on/off pair.
 compare fairly, make motion useful, and explain decisions before showing formulas. These are
 presentation/interaction rules, not changes to the simulation contract.
 
-Status: M2 and the live-demo API are complete; M4 is wired to current server results and awaits manual
-end-to-end review/polish.
+Status: M2 and the live-demo API are complete; M4's guided-narrative UI is wired to current server results
+and awaits manual end-to-end review.
