@@ -190,16 +190,14 @@ export function SimulatorPreview() {
   const offRevenue = playbackFrame(offTimeline, cursor).revenueMicros;
   const onRevenue = playbackFrame(onTimeline, cursor).revenueMicros;
 
-  let heroPoints, heroComparisonPoints, heroLabel, heroComparisonLabel;
-  if (step === "unpaced") {
-    heroPoints = cumulative(offTimeline, cursor); heroLabel = "Pacing off";
-  } else if (step === "paced") {
-    heroPoints = cumulative(onTimeline, cursor); heroLabel = "Pacing on";
-    heroComparisonPoints = cumulative(offTimeline, offTimeline.length); heroComparisonLabel = "Pacing off (complete)";
-  } else {
-    heroPoints = cumulative(offTimeline, cursor); heroLabel = "Pacing off";
-    heroComparisonPoints = cumulative(onTimeline, cursor); heroComparisonLabel = "Pacing on";
-  }
+  // Pacing off is always the primary (ink, solid) series and pacing on the comparison (teal, dashed) one,
+  // in every step and every chart, so the color mapping never has to be relearned.
+  const heroLabel = "Pacing off";
+  // Paced freezes off at its complete curve as a still reference while on animates in on the shared cursor;
+  // every other step keeps off itself live on the cursor.
+  const heroPoints = step === "paced" ? cumulative(offTimeline, offTimeline.length) : cumulative(offTimeline, cursor);
+  const heroComparisonLabel = step === "unpaced" ? undefined : "Pacing on";
+  const heroComparisonPoints = step === "unpaced" ? undefined : cumulative(onTimeline, cursor);
 
   const stepIndex = STEPS.findIndex(item => item.id === step);
   const campaignName = (id: string | null) => scenario?.campaigns.find(c => c.id === id)?.name ?? "No ad served";
@@ -212,6 +210,12 @@ export function SimulatorPreview() {
       <button className="text-button reset-link" disabled={busy} onClick={() => void reset()}>{loading === "reset" ? "Resetting…" : "Reset demo"}</button>
     </header>
     <main id="workspace" className="workspace">
+      <div className="ticker" role="status" aria-live="off">
+        <span className="ticker-item"><span>Elapsed</span><strong>{sessionTime(cutoffMs)}</strong></span>
+        <span className="ticker-item"><span>Pacing off, revenue</span><strong>{money(offRevenue)}</strong></span>
+        <span className="ticker-item on"><span>Pacing on, revenue</span><strong>{money(onRevenue)}</strong></span>
+      </div>
+      <div className="workspace-body">
       {error && <div className="notice error-notice" role="alert"><strong>Something needs attention</strong><span>{error}</span><button className="text-button" onClick={() => setError(null)}>Dismiss</button></div>}
 
       <nav className="step-nav" aria-label="Guide progress">
@@ -222,16 +226,17 @@ export function SimulatorPreview() {
       </nav>
 
       {step === "intro" && <section className="panel intro-card">
-        <p className="eyebrow">Search ads · marketplace simulator</p>
+        <p className="eyebrow">A search-ads marketplace, run twice</p>
         <h1>What changes when advertisers spread their spending over time?</h1>
         <p className="lede">This demo replays the identical six-hour marketplace twice: once with advertiser budgets free to spend
           as fast as they can win, and once with pacing holding some budget back for later. Watch each play out, then compare
           them side by side.</p>
         {!bothReady ? <p className="notice compact">{loading === "computing" ? "Computing both runs…" : "Loading scenario…"}</p> : <p className="small muted">
-          {scenario?.requestCount.toLocaleString()} requests · {scenario?.campaigns.length} campaigns · {scenario?.categories.length} categories · 6 simulated hours.
-          Both results are already computed — there is nothing to configure or run.
+          The marketplace runs {scenario?.requestCount.toLocaleString()} requests through {scenario?.campaigns.length} campaigns
+          across {scenario?.categories.length} categories over six simulated hours. Both results are already computed — there is
+          nothing to configure or run.
         </p>}
-        <div className="step-actions"><button className="button primary" disabled={!bothReady} onClick={() => goToStep("unpaced")}>Begin →</button></div>
+        <div className="step-actions"><button className="button primary" disabled={!bothReady} onClick={() => goToStep("unpaced")}>Begin</button></div>
       </section>}
 
       {step !== "intro" && <>
@@ -243,12 +248,12 @@ export function SimulatorPreview() {
                 : "Marketplace revenue, both modes"}</h3>
               <p className="revenue-total">{step === "paced" ? money(onRevenue) : money(offRevenue)}</p>
               <p className="small muted">
-                {step === "unpaced" && "Pacing off · cumulative through " + sessionTime(cutoffMs)}
-                {step === "paced" && "Pacing on · cumulative through " + sessionTime(playbackFrame(onTimeline, cursor).cutoffMs) + " · gray line is the completed pacing-off run"}
-                {(step === "compare" || step === "explore") && `Both modes · same requests, same budgets · through ${sessionTime(cutoffMs)}`}
+                {step === "unpaced" && "Cumulative through " + sessionTime(cutoffMs) + ". Pacing on has not run yet."}
+                {step === "paced" && "Pacing on is animating in against the completed pacing-off line."}
+                {(step === "compare" || step === "explore") && `Same requests, same budgets, through ${sessionTime(cutoffMs)}.`}
               </p>
             </div>
-            <span className="legend"><i />{heroLabel}{heroComparisonLabel && ` · dashed: ${heroComparisonLabel}`}</span>
+            <span className="legend"><i />Pacing off{heroComparisonLabel && " · pacing on is dashed"}</span>
           </div>
           <TimelineChart points={heroPoints} comparisonPoints={heroComparisonPoints} durationMs={duration} label={heroLabel}
             comparisonLabel={heroComparisonLabel} maxValue={totalBudget} cumulative />
@@ -273,9 +278,9 @@ export function SimulatorPreview() {
         </section>}
 
         <div className="step-actions">
-          {stepIndex > 1 && <button className="button secondary" onClick={() => goToStep(STEPS[stepIndex - 1].id)}>← Back</button>}
+          {stepIndex > 1 && <button className="button secondary" onClick={() => goToStep(STEPS[stepIndex - 1].id)}>Back</button>}
           {stepIndex < STEPS.length - 1 && <button className="button primary" disabled={!bothReady} onClick={() => goToStep(STEPS[stepIndex + 1].id)}>
-            {step === "unpaced" ? "Next: turn pacing on →" : step === "paced" ? "Next: compare →" : "Next: explore freely →"}
+            {step === "unpaced" ? "Turn pacing on" : step === "paced" ? "Compare the results" : "Explore freely"}
           </button>}
         </div>
       </>}
@@ -315,7 +320,7 @@ export function SimulatorPreview() {
                 <td><strong>{row.query ?? row.category}</strong><small>{row.category} · {row.userId}</small></td>
                 <td><strong>{campaignName(row.off?.winnerCampaignId ?? null)}</strong><small>{row.off?.filled ? money(row.off.priceMicros) : "No charge"} · {row.off?.participantCount ?? 0} bidders</small></td>
                 <td><strong>{campaignName(row.on?.winnerCampaignId ?? null)}</strong><small>{row.on?.filled ? money(row.on.priceMicros) : "No charge"} · {row.on?.participantCount ?? 0} bidders</small></td>
-                <td><button className="inspect-button" onClick={() => void inspect(row.requestId)}>Inspect ↗</button></td>
+                <td><button className="inspect-button" onClick={() => void inspect(row.requestId)}>Inspect</button></td>
               </tr>)}</tbody>
             </table></div>}
             <div className="table-footer"><span>{requestRows.length ? `Showing first ${requestRows.length} of ${requestTotal.toLocaleString()} revealed requests` : "No current requests"}</span></div>
@@ -338,7 +343,8 @@ export function SimulatorPreview() {
           <li><strong>Compare, then explore.</strong> Open a request funnel to see quality gating, utility ranking, and the auction, side by side for both modes.</li>
         </ol><p>Quality determines who reaches the auction. Utility—effective bid × quality—determines the winner. All objectives pay per impression.</p></div>
       </Disclosure>
-      <footer className="app-footer"><span>Ad Market Lab · Learn the mechanism, not a revenue promise.</span><span>One slot. Impression billing. Replayable inputs.</span></footer>
+      <footer className="app-footer"><span>Ad Market Lab. Learn the mechanism, not a revenue promise.</span><span>One slot. Impression billing. Replayable inputs.</span></footer>
+      </div>
     </main>
     {inspecting && scenario && <RequestSheet off={inspecting.off} on={inspecting.on} scenario={scenario} onClose={() => setInspecting(null)} />}
   </div>;

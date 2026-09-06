@@ -80,7 +80,7 @@ export function CampaignStories({ campaigns, offTimeline, onTimeline, onExplore 
             <div><dt>Pacing on</dt><dd>{money(onCheckpoint)} <span>{percent(onCheckpoint, campaign.budgetMicros)} {story.checkpointLabel}</span></dd></div>
             {story.lateLabel && <div className="story-late"><dt>Late activity</dt><dd>{money(offLate!)} off / {money(onLate!)} on <span>{story.lateLabel}</span></dd></div>}
           </dl>
-          <button className="text-button story-explore" onClick={() => onExplore(campaign.id, story.checkpointHour)}>See this campaign’s full curve →</button>
+          <button className="text-button story-explore" onClick={() => onExplore(campaign.id, story.checkpointHour)}>See this campaign’s full curve</button>
         </article>;
       })}
     </div>

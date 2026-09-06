@@ -30,20 +30,20 @@ export function TimelineChart({ points, comparisonPoints, durationMs, label, com
     root.numberFormatter.set("numberFormat", monetary ? "$#,###.00" : "#.0");
     const chart = root.container.children.push(am5xy.XYChart.new(root, { panX: false, panY: false, wheelX: "none", wheelY: "none", paddingLeft: 0, paddingRight: 12 }));
     const xRenderer = am5xy.AxisRendererX.new(root, { minGridDistance: 75 });
-    xRenderer.labels.template.setAll({ fontSize: 11, fill: am5.color(0x63756b) }); xRenderer.grid.template.set("visible", false);
+    xRenderer.labels.template.setAll({ fontSize: 11, fill: am5.color(0x5e6b62) }); xRenderer.grid.template.set("visible", false);
     const xAxis = chart.xAxes.push(am5xy.DateAxis.new(root, { baseInterval: { timeUnit: "minute", count: 5 }, min: 0, max: durationMs, strictMinMax: true, maxDeviation: 0, markUnitChange: false, dateFormats: { minute: "HH:mm", hour: "HH:mm", day: "HH:mm" }, tooltipDateFormat: "HH:mm", renderer: xRenderer }));
     const yRenderer = am5xy.AxisRendererY.new(root, { minGridDistance: 40 });
-    yRenderer.labels.template.setAll({ fontSize: 11, fill: am5.color(0x63756b), width: 58 }); yRenderer.grid.template.setAll({ stroke: am5.color(0xdfe7df), strokeOpacity: 0.65 });
+    yRenderer.labels.template.setAll({ fontSize: 11, fill: am5.color(0x5e6b62), width: 58 }); yRenderer.grid.template.setAll({ stroke: am5.color(0xc9d1c5), strokeOpacity: 0.65 });
     const yAxis = chart.yAxes.push(am5xy.ValueAxis.new(root, { min: 0, max: maxValue === undefined ? undefined : maxValue / (monetary ? 1_000_000 : 1), strictMinMax: maxValue !== undefined, renderer: yRenderer }));
     const makeSeries = (name: string, color: number) => {
       const series = chart.series.push(am5xy.LineSeries.new(root, { name, xAxis, yAxis, valueXField: "time", valueYField: "value", locationX: 0, connect: false, stroke: am5.color(color), fill: am5.color(color), tooltip: am5.Tooltip.new(root, { labelText: "{valueX.formatDate('HH:mm')} elapsed\n{name}: {valueY}" }) }));
       series.strokes.template.set("strokeWidth", 2.5);
       return series;
     };
-    const actual = makeSeries(label, 0x18745a);
-    const comparison = comparisonLabel ? makeSeries(comparisonLabel, 0x61756d) : undefined;
+    const actual = makeSeries(label, 0x16211d);
+    const comparison = comparisonLabel ? makeSeries(comparisonLabel, 0x2b6a63) : undefined;
     comparison?.strokes.template.setAll({ strokeDasharray: [6, 4] });
-    const targetSeries = target ? chart.series.push(am5xy.LineSeries.new(root, { name: "Linear spend target", xAxis, yAxis, valueXField: "time", valueYField: "target", locationX: 0, stroke: am5.color(0x99a49d), connect: false })) : undefined;
+    const targetSeries = target ? chart.series.push(am5xy.LineSeries.new(root, { name: "Linear spend target", xAxis, yAxis, valueXField: "time", valueYField: "target", locationX: 0, stroke: am5.color(0x94a091), connect: false })) : undefined;
     targetSeries?.strokes.template.setAll({ strokeDasharray: [3, 3], strokeWidth: 1.5 });
     const cursor = chart.set("cursor", am5xy.XYCursor.new(root, { behavior: "none", xAxis })); cursor.lineY.set("visible", false);
     seriesRef.current = { actual, comparison, target: targetSeries };
