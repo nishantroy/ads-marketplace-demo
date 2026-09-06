@@ -64,15 +64,25 @@ interface Archetype {
   objective: Objective;
 }
 
+/**
+ * Budgets are not free parameters. A campaign can only spend what it can win, and in this ladder a winner
+ * pays roughly the next bid down, so budget is sized as `target impressions x price paid when winning`,
+ * then calibrated against both pacing modes until every tier spends out. Budgets that ignore this starve
+ * the cheap tiers: they only win when the tiers above them are out of budget or paced out, so an
+ * over-funded cheap campaign strands most of its money in both modes.
+ *
+ * Target impressions per tier: 120, 115, 115, 110, 105, 100, 95, 90 out of roughly 1,000 requests per
+ * category, which keeps total demand just under the supply of score-qualified requests.
+ */
 const ARCHETYPES: Archetype[] = [
-  { tier: "strong", bid: 1.45, budget: 80, base: 0.9, objective: "click" },
-  { tier: "strong", bid: 1.3, budget: 70, base: 0.82, objective: "conversion" },
-  { tier: "medium", bid: 0.95, budget: 130, base: 0.95, objective: "impression" },
-  { tier: "medium", bid: 0.85, budget: 120, base: 0.86, objective: "click" },
-  { tier: "medium", bid: 0.72, budget: 110, base: 0.78, objective: "conversion" },
-  { tier: "low", bid: 0.48, budget: 70, base: 0.74, objective: "impression" },
-  { tier: "low", bid: 0.38, budget: 60, base: 0.7, objective: "click" },
-  { tier: "low", bid: 0.3, budget: 55, base: 0.66, objective: "conversion" },
+  { tier: "strong", bid: 1.45, budget: 156, base: 0.9, objective: "click" },
+  { tier: "strong", bid: 1.3, budget: 109, base: 0.82, objective: "conversion" },
+  { tier: "medium", bid: 0.95, budget: 97, base: 0.95, objective: "impression" },
+  { tier: "medium", bid: 0.85, budget: 79, base: 0.86, objective: "click" },
+  { tier: "medium", bid: 0.72, budget: 50, base: 0.78, objective: "conversion" },
+  { tier: "low", bid: 0.48, budget: 36, base: 0.74, objective: "impression" },
+  { tier: "low", bid: 0.38, budget: 23, base: 0.7, objective: "click" },
+  { tier: "low", bid: 0.3, budget: 5, base: 0.66, objective: "conversion" },
 ];
 
 /** Smallest gap between adjacent archetype base scores is 0.04, so jitter stays below half of that. */

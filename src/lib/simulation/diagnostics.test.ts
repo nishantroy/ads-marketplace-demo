@@ -34,12 +34,23 @@ describe("baseline diagnostics", () => {
 
   it("keeps real competition in the auctions", () => {
     expect(report.unpaced.multiBidderShareOfFilled).toBeGreaterThan(0.6);
-    expect(report.unpaced.fillRate).toBeGreaterThan(0.8);
+    expect(report.paced.multiBidderShareOfFilled).toBeGreaterThan(0.6);
+    expect(report.paced.fillRate).toBeGreaterThan(0.85);
   });
 
-  it("exhausts some budgets without exhausting every campaign", () => {
-    expect(report.unpaced.exhaustedCampaigns).toBeGreaterThan(0);
-    expect(report.unpaced.exhaustedCampaigns).toBeLessThan(report.campaignCount);
+  it("lets at least 90% of campaigns deliver their budget in both modes", () => {
+    // Measured by spend share, not by whether a campaign ended below the reserve: budget delivery is the
+    // question, and a campaign sitting at 99% with a few cents left has delivered.
+    const bar = Math.ceil(report.campaignCount * 0.9);
+    expect(report.unpaced.campaignsSpent95).toBeGreaterThanOrEqual(bar);
+    expect(report.paced.campaignsSpent95).toBeGreaterThanOrEqual(bar);
+  });
+
+  it("shows the unpaced market burning out before the session ends", () => {
+    // A property of this fixture, not a law: budgets are sized so unpaced demand runs out early, which is
+    // what makes the pacing comparison worth looking at.
+    expect(report.unpaced.fillRate).toBeLessThan(report.paced.fillRate);
+    expect(report.unpaced.windows[2].filled).toBeLessThan(report.paced.windows[2].filled);
   });
 
   it("shows pacing preserving valuable late competition", () => {

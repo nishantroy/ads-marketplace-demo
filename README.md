@@ -89,14 +89,25 @@ actually changed.
 
 ### What the baseline shows
 
-Unpaced, the strong bidders spend out in the first hours and the clearing price falls from $1.25 in the
-first hour to $0.33 in the last. With pacing on, the same campaigns spread their budgets across the session,
-so the last hour clears at $0.48 instead. Total revenue is lower with pacing on, $2,273 against $2,415.
+Unpaced, the strong bidders spend out in the first hours and the market runs dry. The clearing price falls
+from $1.35 in the first hour to $0.23 in the last, and only 357 of the last hour's 1,168 requests find a
+buyer. With pacing on, the same campaigns spread their budgets across the session, so the last hour fills
+984 requests at $0.39.
 
-That is the honest lesson and the app does not hide it: pacing changes when budget is spent and keeps
-valuable bidders in late auctions, but it does not promise more revenue. Note also that pacing lowers the
-average number of admitted candidates late, since throttling removes candidates. Late competition shows up
-in the price the survivors pay, not in the headcount.
+Both modes deliver almost the same total revenue, $2,130 unpaced against $2,148 paced, because both spend
+nearly every campaign's budget. That is the honest lesson and the app does not hide it: pacing changes when
+budget is spent and keeps valuable bidders in late auctions, but it does not promise more revenue.
+
+Two measurement notes that are easy to get wrong. Budget delivery should be read from the share of budget
+spent, not from whether a campaign ended below the reserve price. The reserve measure is knife-edge and
+counts a paced campaign holding a few cents as incomplete, which understates paced delivery badly, 7
+campaigns against 31 on the same run. Late competition likewise shows up in the price the survivors pay,
+not in how many candidates were admitted, since pacing throttles admissions by design.
+
+Campaign budgets are not free parameters either. A campaign can only spend what it can win, and the
+cheapest bidders only win once the tiers above them are out of budget or paced out. Budgets are therefore
+sized as target impressions times the price each tier pays when it wins, which is what lets at least 90% of
+campaigns deliver their budget in both modes.
 
 What exists today (after M2): the shared types, the pure engine, the seeded marketplace generator with both
 presets, the paired-run diagnostics, and the invariant checker, all covered by unit tests. The API and the
