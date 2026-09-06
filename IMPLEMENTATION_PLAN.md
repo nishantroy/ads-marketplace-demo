@@ -26,7 +26,7 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
 | M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
 | M2 | Seeded marketplace and paired-run diagnostics | M1 | DONE | Claude (coordinating assistant) | Generator with baseline and small presets, budgets calibrated for full delivery (`baseline-2`); `docs/m2-diagnostics.md` committed; 44 tests, typecheck and lint pass |
-| M3 | Live-demo API, no persistence (scope cut 2026-09-06) | M0; final integration M1/M2 | IN PROGRESS | API assistant (`api-integration`, worktree `../ads-marketplace-demo-api`) | Latest on/off result pair in server memory, no database or history. Built against a slightly older engine commit; needs a rebase onto the current utility-auction contract before merge. Not yet merged into main |
+| M3 | Live-demo API, no persistence | M0; final integration M1/M2 | DONE | API assistant (`api-integration`, merged) | Latest on/off pair in server memory, no database/history; 6 focused tests, full suite, typecheck/lint/build, and paired 4,000-request smoke pass after merge. |
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | IN PROGRESS | UI assistant (merged from `ui-workspace`) | UI merged into main: workspace, playback, charts, request funnel/side sheet, all against a hand-authored preview walkthrough, not live engine output. Needs the preview data and any stale-contract references reconciled with the current utility-auction contract, then wiring to the M3 API once that merges. |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
 
@@ -178,19 +178,7 @@ Gate: accounting invariants pass for both modes; the report demonstrates underst
 
 ## M3 — Live-demo API (persistence cut 2026-09-06)
 
-Human decision: no database, no Neon, no run history. The API holds one immutable active scenario and, in server memory, only the latest completed result per pacing mode (at most two results at a time). Starting a run in a mode replaces that mode's result; reset regenerates the baseline and clears both. Restarting the server also clears them. This section describes the original Neon-based design for reference; it is superseded. The `api-integration` worktree/branch has the current live-demo API implementation and its own rewritten M3 section, and is not yet merged into main.
-
-Proposed minimal schema:
-
-| Table | Stored data |
-| --- | --- |
-| `scenarios` | Immutable version, seed, config, campaign/user JSONB; active default selection |
-| `requests` | Scenario ID, request ID, timestamp/order, user/category/query |
-| `runs` | Input snapshot/hash, immutable request reference, engine version, pacing mode, status, summary |
-| `request_results` | Run/request IDs, winner, price, full trace JSONB |
-| `run_buckets` | Five-minute marketplace and per-campaign metrics |
-
-Index request ordering and run/request lookup. Enforce uniqueness of run/request results. Preserve historical input references when defaults change.
+Human decision: no database, no Neon, and no run history. The API holds one immutable active scenario and only the latest completed result per pacing mode in server memory (at most two results). Starting a run in a mode replaces that mode’s result; reset regenerates the baseline and clears both; restart also clears both. Failed computation leaves the previous successful pair unchanged. See `docs/live-demo-api.md` for endpoint and pagination semantics.
 
 Endpoints:
 
@@ -207,15 +195,15 @@ GET  /api/runs/:id/requests/:requestId
 
 Tasks:
 
-- [ ] Add schema/migrations and idempotent default seeding.
-- [ ] Validate inputs and return consistent errors and not-found responses.
-- [ ] Load immutable input, compute on the server, and batch-save outputs transactionally.
-- [ ] Mark a run completed only after all outputs are durable; represent running/failed states honestly.
-- [ ] Disable duplicate submission in the UI; avoid adding a job/idempotency framework unless a demonstrated need is discussed.
-- [ ] Reset restores/activates baseline defaults without changing historical runs. Starting a run always resets balances independently of this action.
-- [ ] Retrieve timelines separately from paginated request lists and detailed traces.
+- [x] Seed the active baseline lazily; start every engine run with fresh balances.
+- [x] Validate mode/pagination inputs and return no-store JSON error envelopes.
+- [x] Compute server-side through one engine adapter, check invariants, then publish the complete result into its mode slot.
+- [x] Preserve the previous successful pair if computation fails; retain no partial or failed output.
+- [x] Reset baseline and clear both slots.
+- [x] Retrieve current timelines separately from compact paginated request rows and individual current traces.
+- [ ] Disable duplicate submission in the UI during live integration.
 
-Gate (prototype): unit tests for input validation and the repository interface; manual check that a run can be created, reloaded after a server restart, and reset preserves historical runs. Run the complete 4,000-request engine through the API and record runtime/output size. Real-database integration tests and rollback-on-failure coverage are deferred (see "Deferred productionization").
+Gate: focused live-state/input-validation tests, full unit suite, typecheck, lint, build, and paired 4,000-request HTTP smoke all pass. Database and history behavior are outside this scope.
 
 ## M4 — Playback workspace and request inspection
 
@@ -241,7 +229,7 @@ These are preview-only completions. The full milestone tasks/gate below remain p
 Tasks:
 
 - [ ] Add pacing toggle, run button, computation status, and reset-defaults button.
-- [ ] Load the latest results and provide a minimal selector for persisted runs.
+- [ ] Load the latest pacing-on/off pair; do not add a run-history selector.
 - [ ] Add play/pause, speed, restart, and six-hour simulated clock; no simulation logic in the browser.
 - [ ] Chart marketplace cumulative revenue and per-campaign spend versus target.
 - [ ] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
@@ -260,7 +248,7 @@ Tasks:
 
 - [ ] Add short in-context tooltips and a demo guide: run without pacing, inspect early/late behavior, run with pacing, compare matched runs, inspect supporting auctions.
 - [ ] Explain session budgets, threshold-only relevance effect, per-impression billing, losing-bid price support, and non-guaranteed revenue improvement.
-- [ ] Run the full local flow: seed → unpaced run → paced run → playback → request inspection → reload → reset → reopen historical run.
+- [ ] Run the full local flow: seed → unpaced run → paced run → comparison playback → current request inspection → replace one mode → reset both.
 - [ ] Verify paired inputs match, all accounting invariants hold, and timelines reconcile with traces.
 - [ ] Document setup, migrations, reset behavior, test commands, known limits, and actual diagnostic observations in README.
 - [ ] Record checks, remaining limitations, and local commit handoff.
@@ -269,7 +257,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 
 ## Deferred productionization (follow-ups, not in this build)
 
-- Real Postgres integration tests: seed repeatability, run reload, reset preservation, rollback on persistence failure.
+- Database persistence and history are outside the current live-demo scope.
 - Playwright/browser automation for playback controls and error/empty states.
 - Job/idempotency handling for run submission; hosting-limit assessment for synchronous run computation on Vercel.
 - Optional pacing refinement: probability that also accounts for the fraction of total budget spent.
@@ -286,7 +274,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Engagement definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp to [0,1], then multiply by pair relevance to give quality | Confirmed 2026-09-06 |
 | Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics. Bids span only about 2.7x so quality is not swamped by bid; budgets are calibrated against both modes | Numeric values selected in M2 |
 | Quality-qualified coverage target | At least 90% of requests have two quality-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
-| Persistence | Cut from scope: no database, no Neon/Postgres, no run history. The server keeps only the latest completed result per pacing mode in memory; a new run in a mode replaces its old result, and reset clears both. Detailed in the API branch's M3 rewrite, pending merge | Confirmed 2026-09-06, superseding the earlier Neon-persistence plan |
+| Persistence | No database, Neon/Postgres, or history. Server memory holds only the latest completed result per pacing mode; replacement/reset clears old results. | Confirmed 2026-09-06; live-demo API merged |
 | Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
 | Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
 | Database | Neon Postgres, added after the basic simulator works; in-memory store until then | Confirmed 2026-09-06 |
@@ -405,5 +393,14 @@ Remaining blockers / next owner:
 - Persistence scope cut (human decision, relayed in this chunk, not separately implemented here): no database, no Neon. The `api-integration` worktree already implements this as an in-memory latest-pair store with no history; that branch is not merged in this chunk. The decisions table and M3 section here are updated to state the cut and point at that branch, without duplicating its detailed rewrite.
 - Commands run and outcomes: `npm install` (added `@amcharts/amcharts5`, removed `recharts`); `npm run typecheck` OK; `npm run lint` OK; `npx vitest run` 49/49 passed, unchanged from before the merge; `npm run build` OK (static export, two routes); manual dev-server smoke on `127.0.0.1:3002` returned HTTP 200 and rendered the merged workspace.
 - Decisions / deviations: kept both branches' validation-log history rather than rewriting either; appended this entry after them. Updated the UI's "Try the UI preview" README section and the funnel/sheet copy to describe the current quality/utility mechanic rather than delete it, since the UI itself did not need to change, only its data source and field names.
-- Remaining blockers / next owner: `api-integration` (live-demo API, no persistence) is not yet merged and was built against an older engine commit; it needs the same kind of reconciliation against the current contract before it merges, then the UI's preview data source should be replaced with live API calls. No automated UI/browser tests exist yet, consistent with the project's light-verification preference; only manual review and the checks above were run.
+- Remaining blockers / next owner: live API wiring into the UI, then manual end-to-end review. No automated UI/browser tests exist yet, consistent with the project's light-verification preference; only manual review and the checks above were run.
+
+### Integration chunk: merge api-integration into main
+
+- Date / task / owner: 2026-09-06 / merge `api-integration` into `main` / coordinating assistant.
+- Result: merged two-slot live-demo endpoints, server-side engine adapter, input/pagination validation, no-store JSON errors, focused API tests, and API documentation. No database/history was introduced.
+- Conflict resolution: retained main’s current utility-auction engine documentation and UI direction, then updated it to state that the live API is merged. Replaced obsolete persistence/history tasks with the agreed latest-on/off-pair behavior. Updated `docs/live-demo-api.md` to remove its pre-merge branch/old-engine warning.
+- Reconciliation: the API compiled and passed all focused tests against the current quality/utility contracts without changes to engine or shared types; its adapter already isolated engine imports.
+- Validation: `npm ci`; `npx next typegen`; `npm run typecheck`; `npm run lint`; `npx vitest run` (55/55); `npm run build`; and `git diff --check` all passed. Build reports all seven expected dynamic API routes.
+- Remaining work: replace UI preview loading with current-pair API calls, enable real run/reset controls, show matched pacing comparison, handle replacement/reset/stale result IDs, and perform manual end-to-end validation.
 

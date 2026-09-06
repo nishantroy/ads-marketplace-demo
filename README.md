@@ -7,6 +7,7 @@ quality-adjusted second-price auctions, and budget pacing over a replayable six-
 - [Engine specification](docs/engine-spec.md)
 - [Project agent rules](AGENTS.md)
 - [UI design principles](docs/ui-design-principles.md)
+- [Live-demo API](docs/live-demo-api.md)
 
 ## Local setup
 
@@ -23,8 +24,9 @@ npm run lint
 
 From the parent directory, `make run-ads-marketplace-demo` starts the app on its registered port.
 
-Persistence is out of scope (cut 2026-09-06): there is no database. The live-demo API, built on a
-separate branch pending merge, keeps only the latest completed result per pacing mode in server memory.
+Persistence is out of scope: there is no database or run history. The live-demo API keeps only the
+latest completed result per pacing mode in server memory. Re-running a mode replaces its result; reset
+or a server restart clears both. Current-result requests remain available for funnel drill-down.
 
 ## How it works
 
@@ -163,23 +165,22 @@ updates data without recreating the chart. Default amCharts attribution is retai
 license is served at [`/licenses/amcharts5-LICENSE.txt`](public/licenses/amcharts5-LICENSE.txt). Review
 licensing before public release.
 
-Live API integration, matched pacing overlays, and UI/playback testing remain later chunks. For now
-validation is typecheck, lint, build, and manual review; automated browser testing is deferred.
+Live API wiring, matched pacing overlays, and UI/playback testing remain later chunks. For now validation
+is typecheck, lint, build, and manual review; automated browser testing is deferred.
 
-What exists today (after M2, plus the merged UI preview): the shared types, the pure engine, the seeded
-marketplace generator with both presets, the paired-run diagnostics, the invariant checker, and a UI
-workspace that renders a hand-authored preview of the funnel against the current contract. The live API
-(in progress on a separate branch) and the wiring between them arrive next.
+What exists today: the shared types, pure engine, seeded marketplace and paired diagnostics, invariant
+checker, UI workspace with a hand-authored preview, and live-demo API endpoints for the current pacing-on/off
+pair. The next step is wiring the UI to those endpoints.
 
 ## Layout
 
 - `src/lib/contracts/` shared types: scenario, campaigns, users, requests, traces, run summary, timeline, API shapes.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
 - `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
-- `src/app/` Next.js app router pages, layout, and styles.
+- `src/app/` Next.js app router pages, layout, styles, and API routes.
 - `src/components/simulator/` playback controller, charts, request side sheet, and hand-authored preview
-  data. Replace the preview data with live API responses once the API lane is merged; the chart and sheet
-  already consume contract-shaped values.
+  data; replace preview loading with live API responses in the next UI integration chunk.
+- `src/lib/server/` two-slot live state, input validation, engine adapter, and API service.
 
 ## UI design direction
 
@@ -188,5 +189,5 @@ workspace that renders a hand-authored preview of the funnel against the current
 compare fairly, make motion useful, and explain decisions before showing formulas. These are
 presentation/interaction rules, not changes to the simulation contract.
 
-Status: M2 complete (seeded marketplace, utility auction, paired-run diagnostics). The M4 UI workspace is
-merged and reconciled with the current contract; live API wiring and full M4 integration remain pending.
+Status: M2 is complete; the UI workspace and live-demo API are merged. Live UI/API wiring and full M4
+integration remain pending.
