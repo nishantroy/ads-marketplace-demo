@@ -58,19 +58,20 @@ describe("scenario generation", () => {
     }
   });
 
-  it("spreads traffic unevenly with substantial late volume in every category", () => {
+  it("keeps traffic broadly even, with every category represented late", () => {
     const lateStart = scenario.config.sessionDurationMs - 2 * HOUR;
     const late = scenario.requests.filter((r) => r.timestampMs >= lateStart);
-    expect(late.length / scenario.requests.length).toBeGreaterThan(0.35);
+    expect(late.length / scenario.requests.length).toBeGreaterThan(0.3);
     for (const category of scenario.categories) {
       expect(late.some((r) => r.category === category)).toBe(true);
     }
     const firstHour = scenario.requests.filter((r) => r.timestampMs < HOUR).length;
-    expect(firstHour).toBeLessThan(late.length);
+    expect(firstHour / scenario.requests.length).toBeGreaterThan(0.14);
+    expect(firstHour / scenario.requests.length).toBeLessThan(0.2);
   });
 
-  it("keeps the traffic curve and bucket allocation exact", () => {
-    expect(trafficWeight(0, 72)).toBeLessThan(trafficWeight(71, 72));
+  it("keeps the near-uniform traffic curve and bucket allocation exact", () => {
+    expect(Math.abs(trafficWeight(0, 72) - trafficWeight(71, 72))).toBeLessThan(0.15);
     const counts = allocate(60, [1, 2, 3]);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(60);
     expect(counts).toEqual([10, 20, 30]);

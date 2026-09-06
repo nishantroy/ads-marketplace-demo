@@ -118,10 +118,12 @@ for both pacing modes. The report is deterministic, so a change to that file mea
 Quality is doing real work, not decorating the ranking. In 67.7% of contested unpaced auctions the winner
 was outbid by a campaign that lost, which ranking on bid alone would make impossible by construction.
 
-Unpaced, the market spends its budgets early and then goes quiet: the last hour fills only 129 of 1,168
-requests, at the reserve price. With pacing on the same campaigns spread their budgets across the session
-and the last hour fills 983 requests at $0.38. Total revenue is nearly identical, $2,153 unpaced against
-$2,147 paced, because both modes deliver essentially every campaign's budget.
+Traffic is approximately even across the six-hour teaching session (with a small deterministic wobble),
+not a claim about a real-world daily traffic curve. Unpaced, the market spends $675 of $2,126 in the first
+hour, exhausts campaigns with a median time of 3h40, and fills none of the last hour’s 658 requests. With
+pacing on the same campaigns spread their budgets across the session and fill 631 of those last-hour
+requests at $0.56. Total revenue remains close—$2,126 unpaced against $2,114 paced—because both modes
+deliver essentially every campaign’s budget.
 
 That is the honest lesson: pacing changes when budget is spent and keeps valuable bidders in late auctions,
 but it does not promise more revenue. Note the trade-off in the fixture, too. Budgets are sized so that all

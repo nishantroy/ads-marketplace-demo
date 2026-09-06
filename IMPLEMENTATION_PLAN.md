@@ -16,6 +16,7 @@ Compute a whole run server-side, persist it, then animate a lightweight timeline
 - Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
 - Superseded 2026-09-06: ranking order was originally static across requests, because relevance was per category and so common to every candidate. Campaigns now carry a per-segment affinity, making relevance a property of the user-campaign pair, so ranking order varies per request. See the utility auction decision below.
 - Pacing keeps the simple spend-versus-target probability. Because second-price charges sit below bid, the probability is fractional only inside a one-bid-wide band and behaves almost binarily. A later option, sequenced only if needed, is to make probability also depend on the fraction of total budget already spent.
+- Traffic is near-uniform across the six-hour teaching session, with a small deterministic wobble. The previous rising curve put only 8.5% of traffic in hour one and obscured natural unpaced burn-out; it was replaced rather than visually exaggerating the chart.
 
 ## Progress and coordination
 
@@ -424,4 +425,12 @@ Remaining blockers / next owner:
 - Deliberate limits: only the current two server results are addressable, as specified. The request explorer shows the first 30 revealed rows, not a historical browser. UI does not claim a pacing revenue direction. Browser playback only reveals API-recorded outputs.
 - Validation: `npx next typegen`, `npm run typecheck`, `npm run lint`, and `npm run build` passed. Automated UI tests remain deferred by scope decision.
 - Next: human manual flow on port 3002: run off, run on, inspect shared charts at late cursor, open a request funnel, replace a mode, reset. Report UX/polish findings before further changes.
+
+### M2 traffic-shape recalibration
+
+- Human direction: make the short-session request stream more even; do not manufacture the expected pacing story through a visual treatment. Keep the six-hour session rather than silently changing its duration.
+- Change: replaced the quadratic rising traffic weight with a near-uniform deterministic curve and a small 12% sinusoidal wobble. Hour one now receives 675 of 4,000 requests (~17%), rather than 342 (~8.5%). Fixture versions bumped to `baseline-4` and `small-4` because request timestamps/stream identity changed.
+- Calibration: the first even-traffic diagnostic left four low-tier campaigns below the 95%-delivery bar in paced mode. Reduced only the three low-tier archetype budgets (`46 → 42`, `14 → 13`, `15 → 13.5`) to reflect what those tiers can actually win. No pacing, quality, utility, auction, or UI formula changed.
+- Result: all invariants pass. Unpaced spends $675 of $2,126 in hour one and ends with no filled auctions in the final hour (median campaign exhaustion 3h40); paced fills 631 of 658 final-hour requests. Both modes retain at least 90% of campaigns at 95% budget delivery (32 off, 31 on). Revenue is $2,126.01 off / $2,113.68 on; no direction is asserted.
+- Validation: `npm test` (55/55), `npm run diagnose` (9/9 diagnostics), typecheck, lint, and build passed. Diagnostics report regenerated at `docs/m2-diagnostics.md`.
 

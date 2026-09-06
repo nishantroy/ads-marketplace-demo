@@ -88,9 +88,9 @@ const ARCHETYPES: Archetype[] = [
   { tier: "medium", bid: 1.1, budget: 91, base: 0.95, objective: "impression" },
   { tier: "medium", bid: 0.95, budget: 76, base: 0.86, objective: "click" },
   { tier: "medium", bid: 0.85, budget: 29, base: 0.78, objective: "conversion" },
-  { tier: "low", bid: 0.75, budget: 46, base: 0.92, objective: "impression" },
-  { tier: "low", bid: 0.65, budget: 14, base: 0.88, objective: "click" },
-  { tier: "low", bid: 0.55, budget: 15, base: 0.84, objective: "conversion" },
+  { tier: "low", bid: 0.75, budget: 42, base: 0.92, objective: "impression" },
+  { tier: "low", bid: 0.65, budget: 13, base: 0.88, objective: "click" },
+  { tier: "low", bid: 0.55, budget: 13.5, base: 0.84, objective: "conversion" },
 ];
 
 /** Smallest gap between adjacent archetype base scores is 0.04, so jitter stays below half of that. */
@@ -122,12 +122,14 @@ function pick<T>(items: T[], weights: number[], draw: number): T {
 }
 
 /**
- * Traffic weight per bucket: a rising curve so the back half of the session carries most of the traffic,
- * with a short-period wobble so arrivals are uneven rather than a smooth ramp.
+ * Traffic is approximately even across the short teaching session, with a small deterministic wobble.
+ * The old rising curve put only 8.5% of requests in hour one and obscured the natural unpaced burn-out
+ * pattern. This is not intended to represent a universal daily traffic shape.
  */
 export function trafficWeight(bucketIndex: number, bucketCount: number): number {
-  const x = bucketCount === 1 ? 0 : bucketIndex / (bucketCount - 1);
-  return (0.35 + 1.15 * x * x) * (1 + 0.35 * Math.sin(bucketIndex * 0.9));
+  // Retain bucketCount in the public helper signature; callers provide it when generating the full curve.
+  void bucketCount;
+  return 1 + 0.12 * Math.sin(bucketIndex * 0.9);
 }
 
 /** Largest-remainder allocation, so bucket counts sum exactly to `total` without any tie-breaking drift. */
