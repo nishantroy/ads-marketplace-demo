@@ -2,7 +2,7 @@
 
 ## Goal and scope
 
-Build a small educational simulator for a non-technical audience showing candidate generation → ranking → auction, and how budget pacing changes campaign spend and marketplace competition over time.
+Build a small educational simulator for a non-technical audience showing candidate generation → quality gating → utility ranking → auction, and how budget pacing changes campaign spend and marketplace competition over time.
 
 Target: a basic local prototype in approximately 2–3 hours of implementation, not a production-ready application. Use TypeScript, Next.js, and Postgres. Eventual Vercel hosting should remain possible, but deployment, authentication, workers, WebSockets, real ad integrations, and simulated clicks/conversions are out of scope.
 
@@ -48,7 +48,7 @@ Paths are proposed and become final in M0. Shared types live in `src/lib/contrac
 Initial fixture targets (tune and version before freezing the baseline):
 
 - Six-hour session; budgets apply to the session, not a 24-hour day.
-- 4,000 pre-generated requests, 20 static users, four categories.
+- 4,000 pre-generated requests, 20 static users, four categories, four user segments.
 - 32 campaigns, initially eight per category, mixed impression/click/conversion objectives.
 - One ad slot per request; all campaigns bid and pay per impression.
 - Users have category relevance in [0, 1] and belong to a segment. Campaigns have category, objective, fixed historical rates, maximum impression bid, session budget, and an affinity in [0, 1] per segment.
@@ -260,6 +260,10 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Question | Proposed default | Status |
 | --- | --- | --- |
 | Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; Recharts | Confirmed 2026-09-06 |
+| Auction mechanism | Rank by utility (effective bid x quality), not by bid. Quality gates participation; utility decides order | Confirmed 2026-09-06, superseding the original bid-only second-price auction |
+| Pricing rule | Winner pays `clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)`, so better quality buys the same position for less. The alternative, charging the runner-up's raw bid, was rejected: under utility ranking the runner-up can outbid the winner, so it would charge above the winner's own maximum, and capping there would take the whole surplus whenever quality decided the outcome | Confirmed 2026-09-06 |
+| Relevance shape | Per user-campaign pair: user category interest x campaign affinity for the user's segment. Four segments. Chosen because a category-only relevance is common to every candidate in a request and so cancels out of both ranking and price | Confirmed 2026-09-06 |
+| Budget delivery target | At least 90% of campaigns spend at least 95% of budget in both pacing modes, measured by spend share rather than by ending below the reserve. Accepted consequence: budgets sized for full delivery leave the unpaced market nearly empty in the final hour | Confirmed 2026-09-06 |
 | Engagement definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp to [0,1], then multiply by pair relevance to give quality | Confirmed 2026-09-06 |
 | Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics. Bids span only about 2.7x so quality is not swamped by bid; budgets are calibrated against both modes | Numeric values selected in M2 |
 | Quality-qualified coverage target | At least 90% of requests have two quality-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
