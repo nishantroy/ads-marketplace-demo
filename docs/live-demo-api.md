@@ -2,10 +2,14 @@
 
 ## Scope
 
-A single local Next.js server keeps one baseline scenario and **at most two results**: latest pacing off
-and latest pacing on. This is not persistence or run history. A successful new run replaces the previous
-result for its mode. Reset clears both; server restart loses both. The current pair's request traces are
-available only to explain the funnel. No database, user sessions, job queue, or historical request browser.
+There are exactly two results, always: pacing off (`id: "off"`) and pacing on (`id: "on"`). Both are pure,
+cheap (well under a second) functions of the fixed baseline scenario and a pacing mode, so any server
+instance can recompute either one from nothing on any request — there is no "creating" a run distinct from
+"getting" it, and no random run IDs. A process-local cache avoids recomputing when the same instance
+already has, but it is only a performance optimization: a cache miss (a fresh cold start, a different
+serverless instance, a reset) is never an error, it just means the next request recomputes. This is not
+persistence or run history; there is nothing to browse beyond the current pair's request traces, which
+exist only to explain the funnel. No database, user sessions, job queue, or historical request browser.
 
 The API is merged into `main` and typechecks against the current quality/utility auction contract.
 `src/lib/server/engine-adapter.ts` is the only API module importing engine/fixture implementations, so
@@ -19,23 +23,24 @@ Existing shared response types in `src/lib/contracts/api.ts` are unchanged.
 | Method / path | Response | Meaning |
 | --- | --- | --- |
 | `GET /api/scenario` | `{ scenario }` | Baseline summary without the 4,000 input requests; seeded lazily |
-| `POST /api/scenario/reset` | `{ scenario, reseeded: true }` | Regenerate baseline and discard both current results; no body required |
-| `POST /api/runs` | `{ run }`, HTTP 201 | Compute a whole run, then publish it into the corresponding mode slot |
-| `GET /api/runs` | `{ runs }` | Zero to two completed results, pacing off then on; not a history list |
-| `GET /api/runs/:id` | `{ run }` | One currently retained result's metadata and summary |
+| `POST /api/scenario/reset` | `{ scenario, reseeded: true }` | Regenerate baseline (same fixed seed, so an identical scenario); no body required |
+| `GET /api/runs` | `{ runs }` | Always both completed results, `"off"` then `"on"`; not a history list |
+| `GET /api/runs/:id` | `{ run }` | `id` is `"off"` or `"on"`; anything else is 404 |
 | `GET /api/runs/:id/timeline` | `{ runId, buckets }` | Lightweight five-minute metrics |
-| `GET /api/runs/:id/requests` | `{ runId, items, nextCursor, total }` | Compact current-run request rows; no candidate traces |
-| `GET /api/runs/:id/requests/:requestId` | `{ runId, trace }` | One current-run funnel trace |
+| `GET /api/runs/:id/requests` | `{ runId, items, nextCursor, total }` | Compact request rows for that mode; no candidate traces |
+| `GET /api/runs/:id/requests/:requestId` | `{ runId, trace }` | One funnel trace for that mode |
 
-### Run creation
+### Computing a result
 
-Send `Content-Type: application/json` and exactly `{ "pacingEnabled": true }` or `false`.
-The server supplies the baseline inputs, fresh balances, and engine version. It computes synchronously,
-checks accounting invariants, then replaces the old mode slot with the complete result. Failure returns
-HTTP 500 and leaves the previous pair unchanged; no partial or failed result is retained.
+There is no `POST /api/runs`: every `GET` above computes on demand from the baseline scenario if this
+instance hasn't already, checking accounting invariants each time. If a recompute throws, the instance
+falls back to whatever it last cached for that mode rather than erroring, so a transient failure never
+takes away a result someone already saw; only a first-ever computation on a fresh instance can surface
+HTTP 500.
 
-Run IDs and wall-clock metadata differ on each invocation; they never feed the simulation. Compare only
-opposite modes with identical `inputHash` and `engineVersion`. Do not assume higher revenue with pacing.
+Wall-clock metadata (`createdAt`/`completedAt`) differs on each recomputation; it never feeds the
+simulation. Compare only opposite modes with identical `inputHash` and `engineVersion`. Do not assume
+higher revenue with pacing.
 
 ### Current request pagination
 
@@ -48,14 +53,12 @@ opposite modes with identical `inputHash` and `engineVersion`. Do not assume hig
   when changing the playback cutoff or run. Request ordering is the engine's stable sequence order.
 - Negative/fractional/unsafe integers, unknown parameters, and duplicate parameters return HTTP 400.
 
-### Errors and replacement
+### Errors
 
 Errors use `{ "error": { "code": "bad_request" | "not_found" | "internal", "message": "..." } }`.
-Invalid inputs return 400; unknown/replaced/reset IDs return 404; computation failures return 500.
-Next.js handles unsupported HTTP methods with 405. JSON responses set `Cache-Control: no-store`.
-
-If a drill-down returns 404 after another run/reset, reload `GET /api/runs` and close the stale detail
-view. Only the two current IDs are valid. No lookup into old requests is supported.
+Invalid inputs return 400; an id other than `"off"`/`"on"` returns 404; a first-ever computation failure
+on a fresh instance (nothing cached yet to fall back to) returns 500. Next.js handles unsupported HTTP
+methods with 405. JSON responses set `Cache-Control: no-store`.
 
 ## Local use
 
@@ -65,17 +68,14 @@ added. Merge/integrate the lanes before switching the UI to same-origin fetches.
 
 ```bash
 curl http://127.0.0.1:3002/api/scenario
-curl -X POST http://127.0.0.1:3002/api/runs \
-  -H 'Content-Type: application/json' -d '{"pacingEnabled":false}'
-curl -X POST http://127.0.0.1:3002/api/runs \
-  -H 'Content-Type: application/json' -d '{"pacingEnabled":true}'
 curl http://127.0.0.1:3002/api/runs
-# Substitute a current result ID from the response:
-curl 'http://127.0.0.1:3002/api/runs/RESULT_ID/requests?limit=10&beforeMs=3600000'
+curl 'http://127.0.0.1:3002/api/runs/off/requests?limit=10&beforeMs=3600000'
+curl 'http://127.0.0.1:3002/api/runs/on/requests?limit=10&beforeMs=3600000'
 curl -X POST http://127.0.0.1:3002/api/scenario/reset
 ```
 
-Memory is shared by route modules within one process (and retained across ordinary dev hot reloads),
-not across multiple processes or Vercel instances. The demo is local-only and unauthenticated; a reset
+Each server instance's cache (retained across ordinary dev hot reloads) is local to that process, not
+shared across multiple processes or Vercel instances — but this no longer matters for correctness, only
+for whether a given request recomputes or reuses a cached result. The demo is local-only and unauthenticated; a reset
 or replacement affects every browser using that server. Do not deploy this as durable multi-user state.
 Restart the server after engine/schema updates. There are no new dependencies or port assignments.

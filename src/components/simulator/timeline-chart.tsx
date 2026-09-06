@@ -43,7 +43,7 @@ export function TimelineChart({ points, comparisonPoints, durationMs, label, com
     yRenderer.labels.template.setAll({ fontSize: 11, fill: am5.color(0x5e6b62), width: 58 }); yRenderer.grid.template.setAll({ stroke: am5.color(0xc9d1c5), strokeOpacity: 0.65 });
     const yAxis = chart.yAxes.push(am5xy.ValueAxis.new(root, { min: 0, max: maxValue === undefined ? undefined : maxValue / (monetary ? 1_000_000 : 1), strictMinMax: maxValue !== undefined, renderer: yRenderer }));
     const makeSeries = (name: string, color: number) => {
-      const series = chart.series.push(am5xy.LineSeries.new(root, { name, xAxis, yAxis, valueXField: "time", valueYField: "value", locationX: 0, connect: false, stroke: am5.color(color), fill: am5.color(color), tooltip: am5.Tooltip.new(root, { labelText: "{valueX.formatDate('HH:mm')} elapsed\n{name}: {valueY}" }) }));
+      const series = chart.series.push(am5xy.LineSeries.new(root, { name, xAxis, yAxis, valueXField: "time", valueYField: "value", locationX: 0, connect: false, stroke: am5.color(color), fill: am5.color(color), tooltip: am5.Tooltip.new(root, { labelText: "{valueX.formatDate('HH:mm')}\n{name}: {valueY}" }) }));
       series.strokes.template.set("strokeWidth", 2.5);
       return series;
     };

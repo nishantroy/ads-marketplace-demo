@@ -19,12 +19,7 @@ export interface ResetResponse {
   reseeded: boolean;
 }
 
-/** POST /api/runs */
-export interface CreateRunRequest {
-  pacingEnabled: boolean;
-}
-
-/** POST /api/runs, GET /api/runs/:id */
+/** GET /api/runs/:id — id is always "off" or "on"; both are always computable from the fixed baseline scenario. */
 export interface RunResponse {
   run: RunRecord;
 }

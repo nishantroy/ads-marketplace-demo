@@ -24,9 +24,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 type Step = "opening" | "tutorialFunnel" | "briefing" | "unpaced" | "paced" | "compare" | "explore";
-/** Opening and briefing are a one-time lead-in, not worth a rail entry; everything else is. */
+/** Only the cold-open landing scene has no rail entry; every stage after it does, for consistent navigation. */
 const RAIL: { id: Step; label: string }[] = [
   { id: "tutorialFunnel", label: "How it works" },
+  { id: "briefing", label: "Briefing" },
   { id: "unpaced", label: "Pacing off" },
   { id: "paced", label: "Pacing on" },
   { id: "compare", label: "Compare" },
@@ -127,10 +128,8 @@ export function SimulatorPreview() {
   const [requestTotal, setRequestTotal] = useState(0);
   const [requestLoading, setRequestLoading] = useState(false);
   const [inspecting, setInspecting] = useState<{ off: RequestTrace | null; on: RequestTrace | null } | null>(null);
-  const [loading, setLoading] = useState<"initial" | "computing" | null>("initial");
   const [error, setError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const computingRef = useRef(false);
 
   const offRun = runs.find(r => !r.pacingEnabled) ?? null;
   const onRun = runs.find(r => r.pacingEnabled) ?? null;
@@ -148,37 +147,13 @@ export function SimulatorPreview() {
     return () => query.removeEventListener("change", listener);
   }, []);
 
-  // Load the scenario and whatever result pair already exists; nothing here requires a user decision.
+  // Both pacing modes are always available: GET /api/runs computes on demand from the fixed baseline
+  // scenario, so there is no run button, no mode to choose, and no separate "computing" wait.
   const refresh = async () => {
     const [scenarioResponse, runResponse] = await Promise.all([api<ScenarioResponse>("/api/scenario"), api<RunListResponse>("/api/runs")]);
     setScenario(scenarioResponse.scenario); setRuns(runResponse.runs);
   };
-  useEffect(() => { void refresh().catch(error => { setError(error.message); setLoading(null); }); }, []);
-  useEffect(() => { if (loading === "initial" && scenario) setLoading(null); }, [loading, scenario]);
-
-  // Compute both pacing modes automatically. There is no run button and no mode to choose.
-  useEffect(() => {
-    if (!scenario || computingRef.current) return;
-    const haveOff = runs.some(r => !r.pacingEnabled);
-    const haveOn = runs.some(r => r.pacingEnabled);
-    if (haveOff && haveOn) return;
-    const modesToCompute = [...(haveOff ? [] : [false]), ...(haveOn ? [] : [true])];
-    computingRef.current = true;
-    setLoading("computing"); setError(null);
-    void Promise.all(modesToCompute.map(mode => api<{ run: RunRecord }>("/api/runs", { method: "POST", body: JSON.stringify({ pacingEnabled: mode }) })))
-      .then(responses => {
-        setRuns(previous => {
-          const next = [...previous];
-          for (const { run } of responses) {
-            const index = next.findIndex(item => item.pacingEnabled === run.pacingEnabled);
-            if (index >= 0) next[index] = run; else next.push(run);
-          }
-          return next;
-        });
-      })
-      .catch(error => setError(error instanceof Error ? error.message : "Unable to compute the comparison."))
-      .finally(() => { computingRef.current = false; setLoading(null); });
-  }, [scenario, runs]);
+  useEffect(() => { void refresh().catch(error => setError(error.message)); }, []);
 
   useEffect(() => {
     const targets = [offRun, onRun].filter((run): run is RunRecord => Boolean(run && !timelines[run.id]));
@@ -321,7 +296,7 @@ export function SimulatorPreview() {
           </ul>
         </aside>
         <div className="step-actions">
-          {tutorialStageIndex > 0 && <button className="button secondary" onClick={() => setTutorialStageIndex(index => index - 1)}>Back</button>}
+          <button className="button secondary" disabled={tutorialStageIndex === 0} onClick={() => setTutorialStageIndex(index => index - 1)}>Back</button>
           {tutorialStageIndex < TUTORIAL_STAGES.length - 1
             ? <button className="button primary" onClick={() => setTutorialStageIndex(index => index + 1)}>Next stage</button>
             : <button className="button primary" onClick={() => goToStep("briefing")}>Continue</button>}
@@ -345,7 +320,7 @@ export function SimulatorPreview() {
             ))}
           </div>
         </div>
-        {!bothReady && <p className="notice compact">{loading === "computing" ? "Computing both runs…" : "Loading scenario…"}</p>}
+        {!bothReady && <p className="notice compact">Loading scenario…</p>}
         <div className="step-actions"><button className="button primary" disabled={!bothReady || !prediction} onClick={() => goToStep("unpaced")}>Watch pacing off</button></div>
       </div>
     </section>}

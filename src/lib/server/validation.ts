@@ -1,17 +1,8 @@
-import type { ApiErrorCode, CreateRunRequest } from "../contracts";
+import type { ApiErrorCode } from "../contracts";
 import type { RequestQuery } from "./live-demo-store";
 
 export class ApiFailure extends Error {
   constructor(public code: ApiErrorCode, message: string, public status: number) { super(message); }
-}
-
-export function parseCreateRun(body: unknown): CreateRunRequest {
-  if (!body || typeof body !== "object" || Array.isArray(body)
-    || !("pacingEnabled" in body) || typeof body.pacingEnabled !== "boolean"
-    || Object.keys(body).some(key => key !== "pacingEnabled")) {
-    throw new ApiFailure("bad_request", "Expected only { pacingEnabled: boolean }.", 400);
-  }
-  return { pacingEnabled: body.pacingEnabled };
 }
 
 export function parseRequestQuery(params: URLSearchParams): RequestQuery {

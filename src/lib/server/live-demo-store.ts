@@ -10,7 +10,13 @@ export interface RequestQuery {
 
 interface DemoResult { run: RunRecord; output: RunOutput }
 
-/** Two result slots, not run history. Local, single-process, non-durable demo state. */
+/**
+ * A per-instance performance cache, not a source of truth. The engine is a pure, cheap (well under a
+ * second) function of the fixed baseline scenario and a pacing mode, so any instance can always recompute
+ * a result from nothing: this class only avoids recomputing when the same instance already has. On a
+ * platform that runs multiple instances with no shared memory (Vercel serverless included), a cache miss
+ * must never be an error — see SimulatorService.ensureRun.
+ */
 export class LiveDemoStore {
   private scenario?: ScenarioSnapshot;
   private results = new Map<boolean, DemoResult>();
@@ -25,33 +31,17 @@ export class LiveDemoStore {
     this.results.clear();
   }
 
-  publish(run: RunRecord, output: RunOutput) {
-    // Clone before replacing the previous result; partial/failed runs never overwrite it.
-    const result = structuredClone({ run, output });
-    this.results.set(run.pacingEnabled, result);
+  getCached(pacingEnabled: boolean): DemoResult | undefined {
+    const cached = this.results.get(pacingEnabled);
+    return cached ? structuredClone(cached) : undefined;
   }
 
-  listRuns() {
-    return structuredClone([...this.results.values()].map(r => r.run)
-      .sort((a, b) => Number(a.pacingEnabled) - Number(b.pacingEnabled)));
+  cache(run: RunRecord, output: RunOutput) {
+    this.results.set(run.pacingEnabled, structuredClone({ run, output }));
   }
 
-  private find(id: string) { return [...this.results.values()].find(r => r.run.id === id); }
-
-  getRun(id: string) {
-    const run = this.find(id)?.run;
-    return run ? structuredClone(run) : undefined;
-  }
-
-  getTimeline(id: string) {
-    const timeline = this.find(id)?.output.timeline;
-    return timeline ? structuredClone(timeline) : undefined;
-  }
-
-  listRequests(id: string, query: RequestQuery) {
-    const traces = this.find(id)?.output.traces;
-    if (!traces) return undefined;
-    const visible = traces.filter(t => query.beforeMs === undefined || t.timestampMs < query.beforeMs);
+  listRequests(output: RunOutput, id: string, query: RequestQuery) {
+    const visible = output.traces.filter(t => query.beforeMs === undefined || t.timestampMs < query.beforeMs);
     const eligible = visible.filter(t => t.sequence >= query.cursor);
     const items: RequestListItem[] = eligible.slice(0, query.limit).map(t => ({
       requestId: t.requestId, sequence: t.sequence, timestampMs: t.timestampMs,
@@ -60,10 +50,5 @@ export class LiveDemoStore {
       priceMicros: t.priceMicros, filled: t.filled,
     }));
     return { runId: id, items, nextCursor: eligible[query.limit]?.sequence ?? null, total: visible.length };
-  }
-
-  getTrace(id: string, requestId: string) {
-    const trace = this.find(id)?.output.traces.find(t => t.requestId === requestId);
-    return trace ? structuredClone(trace) : undefined;
   }
 }

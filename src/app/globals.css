@@ -109,6 +109,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .hero-chart-scene .scene-content, .tutorial-scene .scene-content { max-width: 1560px; width: 100%; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); align-items: start; column-gap: 64px; row-gap: 8px; }
 .hero-chart-scene .scene-main, .tutorial-scene .scene-main { min-width: 0; }
 .tutorial-scene, .hero-chart-scene { padding-top: 96px; }
+.tutorial-scene { padding-bottom: calc(6vh + 72px); }
 /* One shared text scale across every scene's heading and explainer copy, tutorial and pacing alike. */
 .hero-chart-scene h3, .tutorial-scene h3 { font-size: 27px; margin-bottom: 8px; }
 .hero-chart-scene .scene-aside, .tutorial-scene .scene-aside { padding-top: 6px; }
@@ -116,7 +117,10 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .hero-chart-scene .scene-aside p, .tutorial-scene .scene-aside p { color: var(--muted); font-size: 19px; line-height: 1.7; margin-top: 12px; max-width: 46ch; }
 .hero-chart-scene .scene-aside p:first-of-type, .tutorial-scene .scene-aside p:first-of-type { margin-top: 0; }
 .hero-chart-scene .scene-aside strong, .tutorial-scene .scene-aside strong { color: var(--ink); font-family: var(--font-mono); font-weight: 500; }
-.hero-chart-scene .step-actions, .tutorial-scene .step-actions { grid-column: 1 / -1; margin-top: 40px; display: flex; gap: 16px; }
+.hero-chart-scene .step-actions { grid-column: 1 / -1; margin-top: 40px; display: flex; gap: 16px; }
+/* Pinned to a fixed spot at the foot of the scene so it holds still as stage copy changes length,
+   instead of drifting up and down (or sideways, when Back only sometimes rendered) with the content above it. */
+.tutorial-scene .step-actions { position: absolute; left: 50%; bottom: 6vh; transform: translateX(-50%); width: min(1560px, calc(100% - 12vw)); display: flex; gap: 16px; }
 .concept-points { list-style: none; margin: 22px 0 0; padding: 0; max-width: 48ch; }
 .concept-points li { padding: 16px 0; border-top: 1px solid var(--wire); font-size: 17px; line-height: 1.6; color: var(--muted); }
 .concept-points li:first-child { border-top: 0; padding-top: 20px; }
