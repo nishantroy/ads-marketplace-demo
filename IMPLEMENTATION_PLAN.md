@@ -25,7 +25,7 @@ Status values: `TODO`, `IN PROGRESS`, `BLOCKED`, `DONE`. Completion requires the
 | --- | --- | --- | --- | --- | --- |
 | M0 | Approve boundaries, scaffold, freeze contracts | — | DONE | Claude (coordinating assistant) | Next.js 16 scaffold on 127.0.0.1:3002; contracts in `src/lib/contracts/`; spec in `docs/engine-spec.md`; typecheck, lint, 4 unit tests, dev-server smoke all pass (see log) |
 | M1 | Pure engine and unit tests | M0 | DONE | Claude (coordinating assistant) | `simulate()` plus stage modules in `src/lib/simulation/`; 24 unit tests, typecheck and lint pass; no React/database import in the engine |
-| M2 | Seeded marketplace and paired-run diagnostics | M1 | TODO | Unassigned | — |
+| M2 | Seeded marketplace and paired-run diagnostics | M1 | DONE | Claude (coordinating assistant) | Generator with baseline and small presets; `docs/m2-diagnostics.md` committed; 43 tests, typecheck and lint pass |
 | M3 | Neon Postgres persistence and API (in-memory store first) | M0; final integration M1/M2 | TODO | Unassigned | — |
 | M4 | Playback workspace and request side sheet | M0; final integration M2/M3 | TODO | Unassigned | — |
 | M5 | Integrated verification and educational guide | M2/M3/M4 | TODO | Unassigned | — |
@@ -151,12 +151,12 @@ Gate: engine tests and typecheck pass on the tiny fixture. No React/database dep
 
 Tasks:
 
-- [ ] Generate deterministic users, campaigns, and timestamped requests for the six-hour session.
-- [ ] Include uneven traffic and substantial late traffic in every category.
-- [ ] Include several strong bidders with finite budgets, medium price-support bidders, and funded lower bidders per category.
-- [ ] Ensure ranking scores/threshold do not collapse most auctions to zero or one participant. Include all objectives in score-qualified candidates.
-- [ ] Run pacing on/off and produce a reproducible diagnostic report.
-- [ ] Freeze/version the baseline seed and parameter values after inspection; retain the report.
+- [x] Generate deterministic users, campaigns, and timestamped requests for the six-hour session.
+- [x] Include uneven traffic and substantial late traffic in every category.
+- [x] Include several strong bidders with finite budgets, medium price-support bidders, and funded lower bidders per category.
+- [x] Ensure ranking scores/threshold do not collapse most auctions to zero or one participant. Include all objectives in score-qualified candidates.
+- [x] Run pacing on/off and produce a reproducible diagnostic report (`npm run diagnose`).
+- [x] Freeze/version the baseline seed and parameter values after inspection; retain the report.
 
 Report: score-qualified request coverage, filled requests, multiple-bidder auction share, budget-exhaustion times, early/late participant counts and prices, campaign spend trajectories, final revenue, and unspent budgets. Separate threshold qualification from pacing/shortlist attrition.
 
@@ -294,3 +294,12 @@ Remaining blockers / next owner:
 - Observed simulation results: the tiny fixture unpaced yields revenue $2.20, split c1 $0.90 and c3 $1.30 with c2 at $0, matching the hand calculation in `src/lib/fixtures/tiny.ts`. Paced mode on the same fixture leaves the first request unfilled because every target is 0 at t = 0. `checkInvariants` returns no violations in either mode.
 - Decisions / deviations: added `src/lib/simulation/invariants.ts` so M2 diagnostics and the API reuse one accounting check instead of re-deriving it. Timeline buckets carry a per-campaign linear target in both modes so the unpaced chart can still show the reference line. A test asserts no engine file imports React, Next, `pg`, or Drizzle and that none call `Date.now`, `new Date`, or `Math.random`. No test asserts that pacing raises or lowers revenue.
 - Remaining blockers / next owner: none. Next is M2 (seeded six-hour marketplace and paired-run diagnostics), same implementer.
+
+### M2 chunk
+
+- Date / task / owner: 2026-09-06 / M2 seeded marketplace and paired-run diagnostics / Claude (coordinating assistant).
+- Paths: `src/lib/simulation/{generate,diagnostics}.ts`, `src/lib/simulation/{generate,diagnostics}.test.ts`, `src/lib/fixtures/presets.ts`, `docs/m2-diagnostics.md`, `package.json` (`diagnose` script), `README.md`, `IMPLEMENTATION_PLAN.md`.
+- Commands run and outcomes: `npx vitest run` 43/43 passed across 4 files; `npm run diagnose` wrote `docs/m2-diagnostics.md`; `npm run typecheck` OK; `npm run lint` OK.
+- Observed simulation results (baseline, seed `ads-marketplace-2026`, input hash `be2b5b221abafcc4`): score-qualified pair coverage 92.6% against the 90% target. Unpaced fills 91.8% of requests for $2,414.98 revenue, 19 of 32 campaigns exhaust with a median exhaustion at 4h55, and the clearing price falls from $1.25 in the first hour to $0.33 in the last. Paced fills 92.3% for $2,273.01, only 7 campaigns exhaust, and the last hour clears at $0.48. Multi-bidder share is about 99% of filled requests in both modes. No invariant violations in either mode.
+- Decisions / deviations: the small preset is the same generator at reduced size (2 categories, 8 campaigns each, 80 requests) rather than a separate hand-written fixture, so tests validate the code that ships; only the baseline is versioned and used for tuning. Campaign archetypes deliberately decorrelate score rank from bid rank, because identical ranks would stop losing campaigns from ever supporting a price. Late competition is measured by the late clearing price, not by admitted-candidate count: pacing throttles admissions, so it lowers the late participant count (3.16 unpaced to 2.99 paced) while raising the late price. An initial gate assertion that used participant count was wrong and was replaced. Paced revenue is lower than unpaced here, which is the expected honest outcome and is not asserted as a direction.
+- Remaining blockers / next owner: none. Next is M3 (persistence and API, in-memory store first, then Neon), same implementer.

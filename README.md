@@ -16,6 +16,7 @@ npm install
 npm run dev          # http://127.0.0.1:3002
 npm run typecheck    # tsc --noEmit (run `npx next typegen` first on a fresh clone)
 npm test             # vitest run
+npm run diagnose     # regenerate docs/m2-diagnostics.md from the baseline scenario
 npm run lint
 ```
 
@@ -66,15 +67,46 @@ point are marked not evaluated rather than failed. That distinction is what the 
 show. `checkInvariants` is the shared accounting check: revenue equals total campaign spend and the sum of
 clearing prices, no campaign overspends, one winner at most per request, and buckets reconcile with traces.
 
-What exists today (after M1): the shared types, the pure engine and its stage functions, the timeline
-builder, the invariant checker, and a tiny hand-calculable fixture with unit tests. The seeded six-hour
-marketplace, the API, and the playback UI arrive in later milestones.
+### The seeded marketplace
+
+`baselineScenario()` in `src/lib/fixtures/presets.ts` generates the versioned six-hour marketplace: 4
+categories, 20 users, 32 campaigns, and 4,000 requests. Generation is deterministic from the preset seed and
+runs before the simulation, so it is the one place a seeded random stream is allowed.
+
+Each category holds the same ladder of eight campaigns: two strong bidders on modest budgets, three medium
+bidders that mostly support prices, and three cheap bidders with enough budget to keep late auctions alive.
+Score rank deliberately does not follow bid rank. If it did, the same campaigns would both rank and outbid
+everyone and no losing campaign could ever set a price. Traffic rises through the session, so more than a
+third of requests arrive in the final two hours.
+
+`smallScenario()` is the same generator at reduced size for fast unit tests. It is a test fixture, not a
+second baseline: only the baseline is versioned and used for tuning judgments, because coverage and
+competition depend on the ratio of budget to traffic.
+
+Run `npm run diagnose` to regenerate [docs/m2-diagnostics.md](docs/m2-diagnostics.md), the paired-run report
+for both pacing modes. The report is deterministic, so a change to that file means marketplace behaviour
+actually changed.
+
+### What the baseline shows
+
+Unpaced, the strong bidders spend out in the first hours and the clearing price falls from $1.25 in the
+first hour to $0.33 in the last. With pacing on, the same campaigns spread their budgets across the session,
+so the last hour clears at $0.48 instead. Total revenue is lower with pacing on, $2,273 against $2,415.
+
+That is the honest lesson and the app does not hide it: pacing changes when budget is spent and keeps
+valuable bidders in late auctions, but it does not promise more revenue. Note also that pacing lowers the
+average number of admitted candidates late, since throttling removes candidates. Late competition shows up
+in the price the survivors pay, not in the headcount.
+
+What exists today (after M2): the shared types, the pure engine, the seeded marketplace generator with both
+presets, the paired-run diagnostics, and the invariant checker, all covered by unit tests. The API and the
+playback UI arrive in later milestones.
 
 ## Layout
 
 - `src/lib/contracts/` shared types: scenario, campaigns, users, requests, traces, run summary, timeline, API shapes.
 - `src/lib/simulation/` pure engine code (no React, database, HTTP, or wall-clock).
-- `src/lib/fixtures/` hand-calculable tiny scenario used by unit tests.
+- `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
 - `src/app/` Next.js app router pages and API routes.
 
-Status: M1 complete (pure engine and unit tests). Seeded marketplace, API, and playback UI follow.
+Status: M2 complete (seeded marketplace and paired-run diagnostics). API and playback UI follow.
