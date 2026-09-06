@@ -7,7 +7,7 @@ import { DEFAULT_CONFIG, generateScenario, type GeneratorPreset } from "../simul
  */
 export const BASELINE_PRESET: GeneratorPreset = {
   scenarioId: "baseline",
-  version: "baseline-2",
+  version: "baseline-3",
   seed: "ads-marketplace-2026",
   categoryCount: 4,
   userCount: 20,
@@ -23,7 +23,7 @@ export const BASELINE_PRESET: GeneratorPreset = {
  */
 export const SMALL_PRESET: GeneratorPreset = {
   scenarioId: "small",
-  version: "small-2",
+  version: "small-3",
   seed: "small-seed",
   categoryCount: 2,
   userCount: 6,

@@ -1,4 +1,4 @@
-import type { Campaign, ScenarioConfig, User } from "../contracts";
+import type { Campaign, Micros, ScenarioConfig, User } from "../contracts";
 
 export function clamp01(x: number): number {
   if (Number.isNaN(x)) return 0;
@@ -6,7 +6,8 @@ export function clamp01(x: number): number {
 }
 
 /**
- * Objective-specific normalised prediction in [0, 1]. Fixed per campaign; uses scenario scales only.
+ * Objective-specific normalised engagement prediction in [0, 1]. Fixed per campaign; uses scenario scales
+ * only, never live candidate-pool statistics.
  *   impression: quality_prior
  *   click:      historical_ctr / ctr_scale
  *   conversion: historical_cvr / cvr_scale
@@ -22,33 +23,47 @@ export function baseScore(campaign: Campaign, config: ScenarioConfig): number {
   }
 }
 
-export function userRelevance(user: User, category: string): number {
+export function categoryRelevance(user: User, category: string): number {
   return clamp01(user.relevance[category] ?? 0);
 }
 
-/** score = base x relevance. Relevance is shared by every candidate in a request, so it never reorders them. */
-export function score(campaign: Campaign, user: User, config: ScenarioConfig): number {
-  return baseScore(campaign, config) * userRelevance(user, campaign.category);
+/** How well this campaign targets the segment this user belongs to. */
+export function segmentAffinity(campaign: Campaign, user: User): number {
+  return clamp01(campaign.affinity[user.segment] ?? 0);
+}
+
+/**
+ * Relevance of a campaign to a user: the user's interest in the category times the campaign's fit for the
+ * user's segment. Unlike category relevance alone, this differs between candidates in the same request, so
+ * ranking order genuinely varies from request to request.
+ */
+export function pairRelevance(campaign: Campaign, user: User): number {
+  return categoryRelevance(user, campaign.category) * segmentAffinity(campaign, user);
+}
+
+/** quality = engagement x pair relevance. Decides the gate, and scales both utility and price. */
+export function qualityScore(campaign: Campaign, user: User, config: ScenarioConfig): number {
+  return baseScore(campaign, config) * pairRelevance(campaign, user);
+}
+
+/**
+ * Utility of showing this ad: what the impression is worth to the marketplace as a whole. Bid carries the
+ * platform's value, quality carries the user's and the advertiser's. Expressed in micro-utility, since the
+ * bid is in microdollars.
+ */
+export function utilityOf(effectiveBidMicros: Micros, quality: number): number {
+  return effectiveBidMicros * quality;
 }
 
 function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Higher score first; ties broken by ascending campaign id. */
-export function compareByScoreDesc(
-  a: { score: number; campaignId: string },
-  b: { score: number; campaignId: string },
+/** Higher utility first; ties broken by ascending campaign id. */
+export function compareByUtilityDesc(
+  a: { utility: number; campaignId: string },
+  b: { utility: number; campaignId: string },
 ): number {
-  if (b.score !== a.score) return b.score - a.score;
-  return compareIds(a.campaignId, b.campaignId);
-}
-
-/** Higher effective bid first; ties broken by ascending campaign id. */
-export function compareByBidDesc(
-  a: { effectiveBidMicros: number; campaignId: string },
-  b: { effectiveBidMicros: number; campaignId: string },
-): number {
-  if (b.effectiveBidMicros !== a.effectiveBidMicros) return b.effectiveBidMicros - a.effectiveBidMicros;
+  if (b.utility !== a.utility) return b.utility - a.utility;
   return compareIds(a.campaignId, b.campaignId);
 }

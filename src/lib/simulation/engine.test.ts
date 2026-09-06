@@ -18,13 +18,14 @@ function scenarioWith(overrides: {
 }): ScenarioSnapshot {
   return {
     ...tinyScenario,
-    users: [{ id: "u1", name: "Avery", relevance: { shoes: overrides.relevance ?? 1 } }],
+    users: [{ id: "u1", name: "Avery", segment: "s1", relevance: { shoes: overrides.relevance ?? 1 } }],
     campaigns: overrides.campaigns ?? tinyScenario.campaigns,
     requests: overrides.requests ?? [{ id: "r1", timestampMs: HOUR, userId: "u1", category: "shoes" }],
   };
 }
 
-function impressionCampaign(id: string, bid: number, budget: number, prior = 0.9): Campaign {
+/** An impression campaign with an explicit quality prior and full affinity, so quality equals the prior. */
+function impressionCampaign(id: string, bid: number, budget: number, prior = 0.9, affinityS1 = 1): Campaign {
   return {
     id,
     name: id,
@@ -33,6 +34,7 @@ function impressionCampaign(id: string, bid: number, budget: number, prior = 0.9
     qualityPrior: prior,
     bidMicros: dollars(bid),
     budgetMicros: dollars(budget),
+    affinity: { s1: affinityS1, s2: affinityS1 },
   };
 }
 
@@ -94,7 +96,6 @@ describe("engine determinism and purity", () => {
     expect(draws.every((d) => d !== null)).toBe(true);
     expect(new Set(draws).size).toBe(draws.length);
 
-    // Reversing the campaign order changes nothing: each draw is keyed by request and campaign.
     const reversed = { ...scenario, campaigns: [...scenario.campaigns].reverse() };
     const byId = (output: ReturnType<typeof simulate>) =>
       output.traces.map((t) => [...t.candidates].sort((a, b) => a.campaignId.localeCompare(b.campaignId)));
@@ -105,91 +106,147 @@ describe("engine determinism and purity", () => {
 describe("hand-calculated auctions on the tiny fixture", () => {
   const output = simulate(tinyScenario, false);
 
-  it("charges the second-highest effective bid in a multi-bidder auction", () => {
+  it("lets the lowest bidder win when it matches the user best", () => {
     const r1 = traceFor(output, "r1");
-    expect(r1.winnerCampaignId).toBe("c1");
-    expect(r1.runnerUpCampaignId).toBe("c3");
-    expect(r1.priceMicros).toBe(dollars(0.8));
-    expect(r1.participantCount).toBe(3);
-    expect(candidateFor(output, "r1", "c1").budgetAfterMicros).toBe(dollars(0.7));
+    expect(r1.winnerCampaignId).toBe("c2");
+    expect(r1.runnerUpCampaignId).toBe("c1");
+    // c2 bids $0.60 against c1's $1.00 and c3's $0.80, and still wins on utility.
+    const c2 = candidateFor(output, "r1", "c2");
+    const c1 = candidateFor(output, "r1", "c1");
+    expect(c2.bidMicros).toBeLessThan(c1.bidMicros);
+    expect(c2.ranking.evaluated && c2.ranking.utility).toBeGreaterThan(
+      c1.ranking.evaluated ? c1.ranking.utility : Infinity,
+    );
+    expect(c2.ranking.evaluated && c2.ranking.rank).toBe(1);
   });
 
-  it("caps the effective bid at the remaining budget", () => {
+  it("charges the runner-up utility divided by the winner's quality", () => {
+    const r1 = traceFor(output, "r1");
+    // runner-up utility 0.36 / winner quality 0.80 = $0.45, below c2's own $0.60 bid.
+    expect(r1.priceMicros).toBe(dollars(0.45));
+    expect(r1.priceMicros).toBeLessThan(dollars(0.6));
+    expect(r1.priceBasis).not.toBeNull();
+    expect(r1.priceBasis?.winnerQuality).toBeCloseTo(0.8);
+  });
+
+  it("charges the reserve when only one campaign passes the gate", () => {
     const r2 = traceFor(output, "r2");
-    const c1 = candidateFor(output, "r2", "c1");
-    expect(c1.auction.evaluated && c1.auction.effectiveBidMicros).toBe(dollars(0.7));
-    expect(r2.winnerCampaignId).toBe("c3");
-    expect(r2.priceMicros).toBe(dollars(0.7));
+    expect(r2.participantCount).toBe(1);
+    expect(r2.winnerCampaignId).toBe("c1");
+    expect(r2.runnerUpCampaignId).toBeNull();
+    expect(r2.priceMicros).toBe(tinyScenario.config.reserveMicros);
+    expect(r2.priceBasis).toBeNull();
+    expect(candidateFor(output, "r2", "c2").outcome).toBe("excluded_threshold");
   });
 
-  it("charges the reserve when only one campaign qualifies", () => {
+  it("lowers utility as the remaining budget caps the effective bid", () => {
     const r3 = traceFor(output, "r3");
-    expect(r3.participantCount).toBe(1);
-    expect(r3.winnerCampaignId).toBe("c1");
-    expect(r3.runnerUpCampaignId).toBeNull();
-    expect(r3.priceMicros).toBe(tinyScenario.config.reserveMicros);
-    expect(candidateFor(output, "r3", "c2").outcome).toBe("excluded_threshold");
+    const c1 = candidateFor(output, "r3", "c1");
+    expect(c1.ranking.evaluated && c1.ranking.effectiveBidMicros).toBe(dollars(0.7));
+    // c1's utility falls to 0.315, so c3 becomes the runner-up and sets the price instead.
+    expect(r3.runnerUpCampaignId).toBe("c3");
+    expect(r3.priceMicros).toBe(dollars(0.4));
   });
 
-  it("breaks tied second-place bids deterministically by campaign id", () => {
+  it("returns no winner when nothing passes the gate", () => {
     const r4 = traceFor(output, "r4");
-    expect(r4.winnerCampaignId).toBe("c3");
-    expect(r4.runnerUpCampaignId).toBe("c1");
-    expect(r4.priceMicros).toBe(dollars(0.6));
+    expect(r4.filled).toBe(false);
+    expect(r4.priceMicros).toBe(0);
+    expect(r4.participantCount).toBe(0);
+    for (const candidate of r4.candidates) {
+      expect(candidate.outcome).toBe("excluded_threshold");
+      expect(candidate.ranking.evaluated).toBe(false);
+    }
   });
 
   it("reports session totals that match the hand calculation", () => {
-    expect(output.summary.revenueMicros).toBe(dollars(2.2));
+    expect(output.summary.revenueMicros).toBe(dollars(0.95));
     const spend = Object.fromEntries(output.summary.campaigns.map((c) => [c.campaignId, c.spendMicros]));
-    expect(spend).toEqual({ c1: dollars(0.9), c2: 0, c3: dollars(1.3) });
+    expect(spend).toEqual({ c1: dollars(0.1), c2: dollars(0.85), c3: 0 });
     expect(checkInvariants(tinyScenario, output)).toEqual([]);
   });
 });
 
-describe("winner and price selection", () => {
-  it("gives a tied top bid to the lower campaign id and charges that bid", () => {
-    const scenario = scenarioWith({
-      campaigns: [impressionCampaign("c2", 1, 5), impressionCampaign("c1", 1, 5)],
-    });
-    const output = simulate(scenario, false);
-    const trace = traceFor(output, "r1");
-    expect(trace.winnerCampaignId).toBe("c1");
-    expect(trace.runnerUpCampaignId).toBe("c2");
-    expect(trace.priceMicros).toBe(dollars(1));
+describe("quality-adjusted pricing", () => {
+  it("gives a better-quality winner a lower price for the same position", () => {
+    const reserve = dollars(0.1);
+    const runnerUp = { campaignId: "b", bidMicros: dollars(1.2), remainingMicros: dollars(50), quality: 0.4 };
+    const cheap = runAuction(
+      [{ campaignId: "a", bidMicros: dollars(0.6), remainingMicros: dollars(50), quality: 0.9 }, runnerUp],
+      reserve,
+    );
+    // A wins at half B's bid: utility 0.54 against 0.48. It pays 0.48 / 0.9 = $0.533.
+    expect(cheap.winnerCampaignId).toBe("a");
+    expect(cheap.priceMicros).toBe(533333);
+    expect(cheap.priceMicros).toBeLessThan(dollars(0.6));
+
+    const better = runAuction(
+      [{ campaignId: "a", bidMicros: dollars(0.6), remainingMicros: dollars(50), quality: 0.98 }, runnerUp],
+      reserve,
+    );
+    expect(better.winnerCampaignId).toBe("a");
+    expect(better.priceMicros).toBeLessThan(cheap.priceMicros);
   });
 
-  it("returns no winner and no spend when nothing qualifies", () => {
-    const scenario = scenarioWith({ relevance: 0 });
-    const output = simulate(scenario, false);
-    const trace = traceFor(output, "r1");
-    expect(trace.filled).toBe(false);
-    expect(trace.winnerCampaignId).toBeNull();
-    expect(trace.priceMicros).toBe(0);
-    expect(trace.participantCount).toBe(0);
-    expect(output.summary.revenueMicros).toBe(0);
-    expect(output.summary.emptyAuctions).toBe(1);
+  it("never charges more than the winner's effective bid", () => {
+    const result = runAuction(
+      [
+        { campaignId: "a", bidMicros: dollars(1), remainingMicros: dollars(0.3), quality: 0.9 },
+        { campaignId: "b", bidMicros: dollars(2), remainingMicros: dollars(0.25), quality: 0.9 },
+      ],
+      dollars(0.1),
+    );
+    expect(result.winnerCampaignId).toBe("a");
+    expect(result.priceMicros).toBeLessThanOrEqual(dollars(0.3));
   });
 
-  it("keeps campaigns that cannot pay the reserve out of the auction entirely", () => {
+  it("floors the price at the reserve", () => {
+    const result = runAuction(
+      [
+        { campaignId: "a", bidMicros: dollars(1), remainingMicros: dollars(5), quality: 0.9 },
+        { campaignId: "b", bidMicros: dollars(0.11), remainingMicros: dollars(5), quality: 0.1 },
+      ],
+      dollars(0.1),
+    );
+    expect(result.priceMicros).toBe(dollars(0.1));
+  });
+
+  it("breaks tied utilities by campaign id", () => {
+    const result = runAuction(
+      [
+        { campaignId: "c2", bidMicros: dollars(1), remainingMicros: dollars(5), quality: 0.5 },
+        { campaignId: "c1", bidMicros: dollars(1), remainingMicros: dollars(5), quality: 0.5 },
+      ],
+      dollars(0.1),
+    );
+    expect(result.winnerCampaignId).toBe("c1");
+    expect(result.runnerUpCampaignId).toBe("c2");
+    expect(result.priceMicros).toBe(dollars(1));
+  });
+});
+
+describe("gate and shortlist", () => {
+  it("keeps campaigns that cannot pay the reserve out of the funnel entirely", () => {
     const scenario = scenarioWith({
       campaigns: [impressionCampaign("c1", 1, 5), impressionCampaign("c2", 1, 0.05)],
     });
     const output = simulate(scenario, false);
     const poor = candidateFor(output, "r1", "c2");
     expect(poor.outcome).toBe("excluded_budget");
-    expect(poor.auction.evaluated).toBe(false);
     expect(poor.pacing.evaluated).toBe(false);
+    expect(poor.ranking.evaluated).toBe(false);
+    expect(poor.auction.evaluated).toBe(false);
     expect(traceFor(output, "r1").priceMicros).toBe(scenario.config.reserveMicros);
   });
 
-  it("keeps below-threshold and unshortlisted candidates from setting the price", () => {
+  it("keeps gated and unshortlisted candidates from setting the price", () => {
     const campaigns = [
-      impressionCampaign("c1", 1, 5, 0.9),
-      impressionCampaign("c2", 5, 50, 0.8),
-      impressionCampaign("c3", 5, 50, 0.7),
-      impressionCampaign("c4", 5, 50, 0.6),
-      impressionCampaign("c5", 5, 50, 0.5),
-      impressionCampaign("c6", 9, 50, 0.2), // below the 0.45 threshold despite the highest bid
+      impressionCampaign("c1", 1, 50, 0.9),
+      impressionCampaign("c2", 1, 50, 0.85),
+      impressionCampaign("c3", 1, 50, 0.8),
+      impressionCampaign("c4", 1, 50, 0.75),
+      impressionCampaign("c5", 1, 50, 0.7),
+      impressionCampaign("c6", 9, 50, 0.9, 0.05), // huge bid, but affinity 0.05 fails the gate
     ];
     const scenario = scenarioWith({ campaigns });
     const output = simulate(scenario, false);
@@ -198,22 +255,22 @@ describe("winner and price selection", () => {
     expect(candidateFor(output, "r1", "c5").outcome).toBe("excluded_shortlist");
     expect(candidateFor(output, "r1", "c6").outcome).toBe("excluded_threshold");
     expect(candidateFor(output, "r1", "c5").auction.evaluated).toBe(false);
-    expect(candidateFor(output, "r1", "c6").auction.evaluated).toBe(false);
-    // The $9 bid never reaches the auction, so the price is the second shortlisted bid, not $9.
-    expect(trace.priceMicros).toBe(dollars(5));
+    expect(candidateFor(output, "r1", "c6").ranking.evaluated).toBe(false);
+    // The $9 bid never reaches the auction, so the price comes from c2, the shortlisted runner-up.
+    expect(trace.priceMicros).toBe(dollars(0.944444));
   });
 
-  it("never charges more than the winner's effective bid", () => {
-    const result = runAuction(
-      [
-        { campaignId: "a", bidMicros: dollars(1), remainingMicros: dollars(0.3) },
-        { campaignId: "b", bidMicros: dollars(2), remainingMicros: dollars(0.25) },
+  it("ranks by utility, not by quality or bid alone", () => {
+    const scenario = scenarioWith({
+      campaigns: [
+        impressionCampaign("high_quality_cheap", 0.5, 50, 0.95),
+        impressionCampaign("low_quality_rich", 1.5, 50, 0.4),
       ],
-      dollars(0.1),
-    );
-    expect(result.winnerCampaignId).toBe("a");
-    expect(result.priceMicros).toBe(dollars(0.25));
-    expect(result.priceMicros).toBeLessThanOrEqual(dollars(0.3));
+    });
+    const trace = traceFor(simulate(scenario, false), "r1");
+    // utilities: 0.5 x 0.95 = 0.475 against 1.5 x 0.40 = 0.60, so the richer bid wins this time.
+    expect(trace.winnerCampaignId).toBe("low_quality_rich");
+    expect(trace.shortlist[0]).toBe("low_quality_rich");
   });
 });
 
@@ -228,7 +285,7 @@ describe("pacing", () => {
     for (const candidate of trace.candidates) {
       expect(candidate.outcome).toBe("excluded_pacing");
       expect(candidate.pacing.evaluated && candidate.pacing.probability).toBe(0);
-      expect(candidate.auction.evaluated).toBe(false);
+      expect(candidate.ranking.evaluated).toBe(false);
     }
     const unpaced = simulate(scenario, false);
     expect(traceFor(unpaced, "r1").filled).toBe(true);
@@ -248,8 +305,6 @@ describe("pacing", () => {
   it("keeps every accounting invariant in the paced mode too", () => {
     const paced = simulate(tinyScenario, true);
     expect(checkInvariants(tinyScenario, paced)).toEqual([]);
-    // Both modes consume the identical snapshot, so they are comparable. Which one earns more is a
-    // marketplace outcome, not a correctness property, so nothing here asserts a direction.
     const unpaced = simulate(tinyScenario, false);
     expect(paced.summary.totalRequests).toBe(unpaced.summary.totalRequests);
     expect(Number.isInteger(paced.summary.revenueMicros)).toBe(true);
@@ -266,7 +321,7 @@ describe("time boundaries and ordering", () => {
     expect(() => simulate(past, false)).toThrow(/timestamp/);
   });
 
-  it("processes same-timestamp requests in campaign-stable id order", () => {
+  it("processes same-timestamp requests in stable id order", () => {
     const scenario = scenarioWith({
       campaigns: [impressionCampaign("c1", 1, 1.5)],
       requests: [
@@ -297,16 +352,16 @@ describe("timeline buckets", () => {
     expect(output.timeline[24].requests).toBe(1); // r3 at t = 2h
     expect(output.timeline[36].requests).toBe(1); // r4 at t = 3h
     expect(output.timeline[71].cumulativeRevenueMicros).toBe(output.summary.revenueMicros);
-    const c1Final = output.timeline[71].campaigns.find((c) => c.campaignId === "c1");
-    expect(c1Final?.cumulativeSpendMicros).toBe(dollars(0.9));
-    expect(c1Final?.targetMicros).toBe(dollars(1.5));
+    const c2Final = output.timeline[71].campaigns.find((c) => c.campaignId === "c2");
+    expect(c2Final?.cumulativeSpendMicros).toBe(dollars(0.85));
   });
 
   it("distinguishes an unfilled bucket from a zero price", () => {
     expect(output.timeline[1].requests).toBe(0);
     expect(output.timeline[1].avgClearingPriceMicros).toBeNull();
     expect(output.timeline[1].avgParticipants).toBeNull();
-    expect(output.timeline[0].avgClearingPriceMicros).toBe(dollars(0.8));
-    expect(output.timeline[0].emptyAuctions).toBe(0);
+    expect(output.timeline[0].avgClearingPriceMicros).toBe(dollars(0.45));
+    expect(output.timeline[36].filled).toBe(0); // r4 was an empty auction
+    expect(output.timeline[36].emptyAuctions).toBe(1);
   });
 });

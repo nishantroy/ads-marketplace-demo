@@ -30,6 +30,11 @@ export interface ModeReport {
   emptyAuctions: number;
   multiBidderAuctions: number;
   multiBidderShareOfFilled: number;
+  /**
+   * Share of contested auctions in which a losing participant bid more than the winner. This is the utility
+   * auction doing its job: ranking on bid alone would make it zero by construction.
+   */
+  winnerOutbidShare: number;
   revenueMicros: number;
   avgClearingPriceMicros: number | null;
   unspentBudgetMicros: number;
@@ -107,8 +112,21 @@ function windowStats(label: string, snapshot: ScenarioSnapshot, output: RunOutpu
 function buildModeReport(snapshot: ScenarioSnapshot, output: RunOutput, pacingEnabled: boolean): ModeReport {
   const { summary } = output;
   const attrition = emptyAttrition();
+  let contested = 0;
+  let winnerOutbid = 0;
   for (const trace of output.traces) {
     for (const candidate of trace.candidates) attrition[candidate.outcome] += 1;
+    if (!trace.winnerCampaignId || trace.participantCount < 2) continue;
+    contested += 1;
+    const winnerBid = trace.candidates.find((c) => c.campaignId === trace.winnerCampaignId)?.bidMicros ?? 0;
+    const outbid = trace.candidates.some(
+      (c) =>
+        c.auction.evaluated &&
+        c.auction.participates &&
+        c.campaignId !== trace.winnerCampaignId &&
+        c.bidMicros > winnerBid,
+    );
+    if (outbid) winnerOutbid += 1;
   }
 
   const exhaustions = summary.campaigns
@@ -127,6 +145,7 @@ function buildModeReport(snapshot: ScenarioSnapshot, output: RunOutput, pacingEn
     multiBidderAuctions: summary.multiBidderAuctions,
     multiBidderShareOfFilled:
       summary.filledRequests === 0 ? 0 : summary.multiBidderAuctions / summary.filledRequests,
+    winnerOutbidShare: contested === 0 ? 0 : winnerOutbid / contested,
     revenueMicros: summary.revenueMicros,
     avgClearingPriceMicros: summary.avgClearingPriceMicros,
     unspentBudgetMicros: summary.campaigns.reduce((total, c) => total + (c.budgetMicros - c.spendMicros), 0),
@@ -200,6 +219,7 @@ function modeSection(report: ModeReport): string[] {
     `| Filled requests | ${report.filledRequests} (${pct(report.fillRate)}) |`,
     `| Empty auctions | ${report.emptyAuctions} |`,
     `| Multi-bidder share of filled | ${pct(report.multiBidderShareOfFilled)} |`,
+    `| Contested auctions won despite a higher losing bid | ${pct(report.winnerOutbidShare)} |`,
     `| Revenue | ${money(report.revenueMicros)} |`,
     `| Average clearing price | ${money(report.avgClearingPriceMicros)} |`,
     `| Unspent budget | ${money(report.unspentBudgetMicros)} |`,
@@ -244,12 +264,12 @@ export function formatDiagnosticReport(report: DiagnosticReport): string {
     `| Requests / campaigns / users | ${report.totalRequests} / ${report.campaignCount} / ${report.userCount} |`,
     `| Categories | ${report.categories.join(", ")} |`,
     "",
-    "## Score qualification",
+    "## Quality qualification",
     "",
-    "Measured before budget and pacing exclusions, so it isolates the ranking threshold.",
+    "Measured before budget and pacing exclusions, so it isolates the quality gate.",
     "",
-    `- At least one score-qualified campaign: ${pct(report.qualifiedCoverage)} of requests.`,
-    `- At least two score-qualified campaigns: ${pct(report.pairCoverage)} of requests (target 90%).`,
+    `- At least one quality-qualified campaign: ${pct(report.qualifiedCoverage)} of requests.`,
+    `- At least two quality-qualified campaigns: ${pct(report.pairCoverage)} of requests (target 90%).`,
     "",
     "## Paired runs",
     "",

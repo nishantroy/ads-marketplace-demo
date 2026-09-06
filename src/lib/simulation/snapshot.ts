@@ -27,8 +27,8 @@ export function validateSnapshot(snapshot: ScenarioSnapshot): void {
   }
   assertMicros(config.reserveMicros, "reserveMicros");
   if (config.reserveMicros <= 0) throw new RangeError("reserveMicros must be positive");
-  if (!(config.scoreThreshold >= 0 && config.scoreThreshold <= 1)) {
-    throw new RangeError("scoreThreshold must be in [0, 1]");
+  if (!(config.qualityThreshold >= 0 && config.qualityThreshold <= 1)) {
+    throw new RangeError("qualityThreshold must be in [0, 1]");
   }
   if (!Number.isInteger(config.shortlistSize) || config.shortlistSize < 1) {
     throw new RangeError("shortlistSize must be at least 1");
@@ -36,10 +36,13 @@ export function validateSnapshot(snapshot: ScenarioSnapshot): void {
   if (!(config.ctrScale > 0) || !(config.cvrScale > 0)) throw new RangeError("ctrScale and cvrScale must be positive");
 
   const categories = new Set(snapshot.categories);
+  const segments = new Set(snapshot.segments);
+  if (segments.size === 0) throw new RangeError("a scenario needs at least one segment");
   const userIds = new Set<string>();
   for (const user of snapshot.users) {
     if (userIds.has(user.id)) throw new RangeError(`duplicate user id ${user.id}`);
     userIds.add(user.id);
+    if (!segments.has(user.segment)) throw new RangeError(`user ${user.id} has unknown segment ${user.segment}`);
     for (const [category, relevance] of Object.entries(user.relevance)) {
       if (!categories.has(category)) throw new RangeError(`user ${user.id} references unknown category ${category}`);
       if (!(relevance >= 0 && relevance <= 1)) {
@@ -57,6 +60,12 @@ export function validateSnapshot(snapshot: ScenarioSnapshot): void {
     assertMicros(campaign.budgetMicros, `campaign ${campaign.id} budgetMicros`);
     if (campaign.bidMicros <= 0) throw new RangeError(`campaign ${campaign.id} bid must be positive`);
     if (campaign.budgetMicros <= 0) throw new RangeError(`campaign ${campaign.id} budget must be positive`);
+    for (const [segment, affinity] of Object.entries(campaign.affinity)) {
+      if (!segments.has(segment)) throw new RangeError(`campaign ${campaign.id} targets unknown segment ${segment}`);
+      if (!(affinity >= 0 && affinity <= 1)) {
+        throw new RangeError(`campaign ${campaign.id} affinity for ${segment} must be in [0, 1]`);
+      }
+    }
     switch (campaign.objective) {
       case "impression":
         if (!(campaign.qualityPrior > 0 && campaign.qualityPrior <= 1)) {

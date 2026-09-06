@@ -27,17 +27,39 @@ export interface PacingStage {
   admitted: boolean;
 }
 
+/**
+ * The quality gate. Quality is what the user is predicted to get out of the ad: how engaging the campaign
+ * is, times how well it matches this particular user. It decides participation only; ordering is decided by
+ * utility in the ranking stage below.
+ */
 export interface ScoringStage {
   evaluated: true;
-  /** Objective-specific normalised prediction in [0, 1]. */
+  /** Objective-specific normalised engagement prediction in [0, 1]. */
   base: number;
-  /** User category relevance in [0, 1]. */
+  /** This user's relevance for the campaign's category, in [0, 1]. */
+  categoryRelevance: number;
+  /** The campaign's affinity for this user's segment, in [0, 1]. */
+  affinity: number;
+  /** categoryRelevance x affinity: relevance of this campaign to this user. */
   relevance: number;
-  /** base × relevance. */
-  score: number;
+  /** base x relevance. */
+  quality: number;
   passedThreshold: boolean;
-  /** 1-based rank among threshold-qualified candidates for this request; undefined when not qualified. */
-  rank?: number;
+}
+
+/**
+ * Ranking by utility: what the impression is worth to everyone at once. Bid carries the platform's value,
+ * quality carries the user's and the advertiser's. A cheaper, better-matched campaign can outrank a
+ * more expensive, poorly-matched one, which is the whole point of ranking on utility rather than bid.
+ */
+export interface RankingStage {
+  evaluated: true;
+  /** min(bid, remaining budget): a campaign can never be charged more than it can pay. */
+  effectiveBidMicros: Micros;
+  /** effectiveBidMicros x quality, in micro-utility. */
+  utility: number;
+  /** 1-based rank by utility among quality-qualified candidates for this request. */
+  rank: number;
   shortlisted: boolean;
 }
 
@@ -45,9 +67,7 @@ export type AuctionRole = "winner" | "runner_up" | "other";
 
 export interface AuctionStage {
   evaluated: true;
-  /** min(bid, remaining budget). */
-  effectiveBidMicros: Micros;
-  /** effective bid ≥ reserve. Only participants can win or set the price. */
+  /** effective bid >= reserve. Only participants can win or set the price. */
   participates: boolean;
   role: AuctionRole;
 }
@@ -70,6 +90,7 @@ export interface CandidateTrace {
   eligibility: EligibilityStage;
   pacing: PacingStage | NotEvaluated;
   scoring: ScoringStage | NotEvaluated;
+  ranking: RankingStage | NotEvaluated;
   auction: AuctionStage | NotEvaluated;
   outcome: CandidateOutcome;
 }
@@ -85,13 +106,13 @@ export interface RequestTrace {
   /** Number of campaigns retrieved by category match. */
   retrievedCount: number;
   /**
-   * Diagnostic only: how many retrieved campaigns would pass the score threshold for this user,
-   * ignoring budget and pacing. Separates threshold qualification from later attrition.
+   * Diagnostic only: how many retrieved campaigns would pass the quality gate for this user,
+   * ignoring budget and pacing. Separates gate qualification from later attrition.
    */
   thresholdQualifiedCount: number;
-  /** Candidates in funnel order: shortlist by rank, then the rest by campaign id. */
+  /** Candidates in funnel order: shortlist by utility rank, then the rest by campaign id. */
   candidates: CandidateTrace[];
-  /** Campaign ids on the shortlist in rank order. */
+  /** Campaign ids on the shortlist in utility rank order. */
   shortlist: string[];
   /** Finalists with effective bid ≥ reserve. */
   participantCount: number;
@@ -99,6 +120,11 @@ export interface RequestTrace {
   runnerUpCampaignId: string | null;
   /** Clearing price charged to the winner; 0 when no winner. */
   priceMicros: Micros;
+  /**
+   * How the price was derived: the runner-up's utility divided by the winner's quality, floored at the
+   * reserve. Null when there was no runner-up, in which case the winner pays the reserve.
+   */
+  priceBasis: { runnerUpUtility: number; winnerQuality: number } | null;
   filled: boolean;
 }
 

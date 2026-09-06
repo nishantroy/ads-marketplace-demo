@@ -8,7 +8,7 @@ Applies throughout this repository, in addition to `../AGENTS.md`.
 - Ask the human before crossing an undefined product boundary, changing simulation semantics, making an uncertain architectural choice, adding infrastructure, or expanding scope. Explain the ambiguity, recommend the smallest option, and state what it affects.
 - Do not block on routine implementation details already covered by the contract. Record consequential decisions in the plan.
 - Do not add features, dependencies, or abstractions merely for hypothetical future needs. Local prototype first; production deployment is not part of this build.
-- Preserve the educational distinctions: score is not bid, all billing is per impression, only eligible auction participants support prices, and pacing does not guarantee more revenue.
+- Preserve the educational distinctions: ranking is utility (bid times quality), not bid alone; quality gates participation while utility decides order; better quality buys the same position for less; all billing is per impression; only eligible auction participants support prices; and pacing does not guarantee more revenue.
 
 ## Incremental delivery
 

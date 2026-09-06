@@ -5,6 +5,7 @@ import {
   type Objective,
   type ScenarioConfig,
   type ScenarioSnapshot,
+  type Segment,
   type SimRequest,
   type User,
 } from "../contracts";
@@ -24,6 +25,8 @@ export interface GeneratorPreset {
   categoryCount: number;
   userCount: number;
   campaignsPerCategory: number;
+  /** How many user segments exist; defaults to all four. */
+  segmentCount?: number;
   requestCount: number;
   config: ScenarioConfig;
   /**
@@ -34,6 +37,9 @@ export interface GeneratorPreset {
 }
 
 const CATEGORY_NAMES: Category[] = ["travel", "electronics", "home", "fitness"];
+
+/** User segments campaigns can target. Affinity for a segment is what makes relevance pair-specific. */
+const SEGMENT_NAMES: Segment[] = ["bargain", "brand", "research", "casual"];
 
 const USER_NAMES = [
   "Avery", "Blake", "Casey", "Devon", "Emery", "Finley", "Gray", "Harper", "Indigo", "Jordan",
@@ -48,41 +54,43 @@ const QUERY_TEMPLATES: Record<Category, string[]> = {
 };
 
 /**
- * Campaign archetypes, strongest bid first. Score order is deliberately not bid order: the shortlist is
- * score-only, so if the two ranks agreed the same campaigns would always both rank and outbid everyone and
- * no losing campaign could ever support a price. Here the top scorer (index 2) is beaten on bid by two
- * campaigns that score below it, which keeps clearing prices informative.
+ * Campaign archetypes, strongest bid first.
  *
- * As budgets run out the winner walks down this ladder, which is the "cheap late impressions" lesson.
+ * Bids span a deliberately narrow range, about 2.7x from top to bottom. Ranking is by utility, which is bid
+ * times quality, so if bids spanned an order of magnitude the bid term would decide every auction and
+ * quality would be decorative. Keeping bids close lets a well-matched cheap campaign outrank an expensive
+ * one, which is the point of ranking on utility.
+ *
+ * Engagement bases stay in a narrow band too; the wide variation comes from segment affinity, which differs
+ * per user and so reorders candidates from request to request.
  */
 interface Archetype {
   tier: "strong" | "medium" | "low";
   bid: number;
   budget: number;
-  /** Normalised objective prediction in [0, 1] before per-category jitter. */
+  /** Normalised engagement prediction in [0, 1] before per-category jitter. */
   base: number;
   objective: Objective;
 }
 
 /**
- * Budgets are not free parameters. A campaign can only spend what it can win, and in this ladder a winner
- * pays roughly the next bid down, so budget is sized as `target impressions x price paid when winning`,
- * then calibrated against both pacing modes until every tier spends out. Budgets that ignore this starve
- * the cheap tiers: they only win when the tiers above them are out of budget or paced out, so an
- * over-funded cheap campaign strands most of its money in both modes.
+ * Budgets are not free parameters. A campaign can only spend what it can win, so budget is calibrated
+ * against both pacing modes until nearly every campaign delivers. Under a utility auction each campaign
+ * wins mostly in the segments it targets well, which spreads wins far more evenly than a bid-only ladder.
  *
- * Target impressions per tier: 120, 115, 115, 110, 105, 100, 95, 90 out of roughly 1,000 requests per
- * category, which keeps total demand just under the supply of score-qualified requests.
+ * Budgets deliberately do not follow the bid order. Tier index 4 bids more than index 5 but has weaker
+ * engagement, so it wins less and is funded less. That is the mechanic working: what a campaign can spend
+ * follows its utility, which is bid and quality together, not its bid alone.
  */
 const ARCHETYPES: Archetype[] = [
-  { tier: "strong", bid: 1.45, budget: 156, base: 0.9, objective: "click" },
-  { tier: "strong", bid: 1.3, budget: 109, base: 0.82, objective: "conversion" },
-  { tier: "medium", bid: 0.95, budget: 97, base: 0.95, objective: "impression" },
-  { tier: "medium", bid: 0.85, budget: 79, base: 0.86, objective: "click" },
-  { tier: "medium", bid: 0.72, budget: 50, base: 0.78, objective: "conversion" },
-  { tier: "low", bid: 0.48, budget: 36, base: 0.74, objective: "impression" },
-  { tier: "low", bid: 0.38, budget: 23, base: 0.7, objective: "click" },
-  { tier: "low", bid: 0.3, budget: 5, base: 0.66, objective: "conversion" },
+  { tier: "strong", bid: 1.5, budget: 132, base: 0.9, objective: "click" },
+  { tier: "strong", bid: 1.3, budget: 118, base: 0.82, objective: "conversion" },
+  { tier: "medium", bid: 1.1, budget: 91, base: 0.95, objective: "impression" },
+  { tier: "medium", bid: 0.95, budget: 76, base: 0.86, objective: "click" },
+  { tier: "medium", bid: 0.85, budget: 29, base: 0.78, objective: "conversion" },
+  { tier: "low", bid: 0.75, budget: 46, base: 0.92, objective: "impression" },
+  { tier: "low", bid: 0.65, budget: 14, base: 0.88, objective: "click" },
+  { tier: "low", bid: 0.55, budget: 15, base: 0.84, objective: "conversion" },
 ];
 
 /** Smallest gap between adjacent archetype base scores is 0.04, so jitter stays below half of that. */
@@ -92,7 +100,7 @@ export const DEFAULT_CONFIG: ScenarioConfig = {
   sessionDurationMs: 6 * 60 * 60 * 1000,
   bucketDurationMs: 5 * 60 * 1000,
   reserveMicros: dollars(0.1),
-  scoreThreshold: 0.35,
+  qualityThreshold: 0.12,
   shortlistSize: 4,
   ctrScale: 0.05,
   cvrScale: 0.01,
@@ -138,7 +146,7 @@ export function allocate(total: number, weights: number[]): number[] {
   return counts;
 }
 
-function buildUsers(preset: GeneratorPreset, categories: Category[]): User[] {
+function buildUsers(preset: GeneratorPreset, categories: Category[], segments: Segment[]): User[] {
   const rng = mulberry32(`${preset.seed}|users`);
   return Array.from({ length: preset.userCount }, (_, i) => {
     const primary = categories[i % categories.length];
@@ -149,7 +157,9 @@ function buildUsers(preset: GeneratorPreset, categories: Category[]): User[] {
       else if (category === secondary) relevance[category] = round2(0.45 + rng() * 0.25);
       else relevance[category] = round2(0.12 + rng() * 0.22);
     }
-    return { id: `u${pad(i + 1, 2)}`, name: USER_NAMES[i % USER_NAMES.length], relevance };
+    // Segments cycle independently of the category cycle, so segment and category interest are not aligned.
+    const segment = segments[(i * 3 + 1) % segments.length];
+    return { id: `u${pad(i + 1, 2)}`, name: USER_NAMES[i % USER_NAMES.length], segment, relevance };
   });
 }
 
@@ -157,22 +167,45 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function buildCampaigns(preset: GeneratorPreset, categories: Category[]): Campaign[] {
+/**
+ * Affinity vector for one campaign: strong for its primary segment, moderate for the next, weak elsewhere.
+ * The spread is wide on purpose, since this is the term that lets a cheap campaign outrank an expensive one.
+ */
+function buildAffinity(
+  segments: Segment[],
+  primaryIndex: number,
+  rng: () => number,
+): Record<Segment, number> {
+  const affinity: Record<Segment, number> = {};
+  segments.forEach((segment, index) => {
+    const distance = (index - primaryIndex + segments.length) % segments.length;
+    if (distance === 0) affinity[segment] = round2(0.88 + rng() * 0.08);
+    else if (distance === 1) affinity[segment] = round2(0.5 + rng() * 0.15);
+    else affinity[segment] = round2(0.18 + rng() * 0.17);
+  });
+  return affinity;
+}
+
+function buildCampaigns(preset: GeneratorPreset, categories: Category[], segments: Segment[]): Campaign[] {
   const rng = mulberry32(`${preset.seed}|campaigns`);
   const budgetScale = preset.budgetScale ?? preset.requestCount / (categories.length * 1000);
   const campaigns: Campaign[] = [];
 
-  for (const category of categories) {
+  for (let categoryIndex = 0; categoryIndex < categories.length; categoryIndex += 1) {
+    const category = categories[categoryIndex];
     // One factor per category so categories differ in price level without changing the archetype ladder.
     const bidFactor = 0.94 + rng() * 0.12;
     const budgetFactor = 0.9 + rng() * 0.2;
     for (let i = 0; i < preset.campaignsPerCategory; i += 1) {
       const archetype = ARCHETYPES[i % ARCHETYPES.length];
       const base = clampBase(archetype.base + (rng() * 2 - 1) * BASE_JITTER);
+      // Primary segment strides across tiers and categories, so bid rank and segment fit stay uncorrelated.
+      const primaryIndex = (i * 3 + categoryIndex) % segments.length;
       const common = {
         id: `${category}-c${i}`,
         name: `${title(category)} ${archetype.tier} ${i}`,
         category,
+        affinity: buildAffinity(segments, primaryIndex, rng),
         bidMicros: dollars(round2(archetype.bid * bidFactor)),
         budgetMicros: dollars(Math.max(1, round2(archetype.budget * budgetFactor * budgetScale))),
       };
@@ -192,7 +225,14 @@ function title(value: string): string {
 
 /** Invert the score formula so every objective reaches the intended normalised base score. */
 function withObjective(
-  common: { id: string; name: string; category: Category; bidMicros: number; budgetMicros: number },
+  common: {
+    id: string;
+    name: string;
+    category: Category;
+    affinity: Record<Segment, number>;
+    bidMicros: number;
+    budgetMicros: number;
+  },
   objective: Objective,
   base: number,
   config: ScenarioConfig,
@@ -267,15 +307,17 @@ export function generateScenario(preset: GeneratorPreset): ScenarioSnapshot {
     throw new RangeError(`campaignsPerCategory must be between 1 and ${ARCHETYPES.length}`);
   }
   const categories = CATEGORY_NAMES.slice(0, preset.categoryCount);
-  const users = buildUsers(preset, categories);
+  const segments = SEGMENT_NAMES.slice(0, Math.min(preset.segmentCount ?? SEGMENT_NAMES.length, SEGMENT_NAMES.length));
+  const users = buildUsers(preset, categories, segments);
   return {
     scenarioId: preset.scenarioId,
     version: preset.version,
     seed: preset.seed,
     categories,
+    segments,
     config: preset.config,
     users,
-    campaigns: buildCampaigns(preset, categories),
+    campaigns: buildCampaigns(preset, categories, segments),
     requests: buildRequests(preset, categories, users),
   };
 }

@@ -32,6 +32,13 @@ describe("baseline diagnostics", () => {
     expect(report.pairCoverage).toBeGreaterThanOrEqual(0.9);
   });
 
+  it("decides a large share of contested auctions on quality rather than bid", () => {
+    // Ranking on bid alone would make this zero by construction, so it is the check that the utility
+    // auction is actually doing something rather than reproducing the bid order.
+    expect(report.unpaced.winnerOutbidShare).toBeGreaterThan(0.3);
+    expect(report.paced.winnerOutbidShare).toBeGreaterThan(0.3);
+  });
+
   it("keeps real competition in the auctions", () => {
     expect(report.unpaced.multiBidderShareOfFilled).toBeGreaterThan(0.6);
     expect(report.paced.multiBidderShareOfFilled).toBeGreaterThan(0.6);

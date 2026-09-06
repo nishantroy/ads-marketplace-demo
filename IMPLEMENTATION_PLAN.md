@@ -14,7 +14,7 @@ Compute a whole run server-side, persist it, then animate a lightweight timeline
 - Work lanes run sequentially with a single implementer; the parallel-lane boundaries below remain as path ownership guidance only.
 - Get the basic simulator working end to end before wiring persistence. Postgres is provided by Neon (serverless Postgres compatible with Vercel), not a local Docker container. Until M3, runs live in an in-memory server-side store behind a small repository interface so Neon can replace it without touching the engine or UI.
 - Impression-objective campaigns carry a seeded per-campaign quality prior in (0, 1] instead of a constant base score of 1, so they do not all tie at the top of every category's ranking.
-- Ranking order within a category is intentionally static across requests (score is a per-campaign constant times a per-user relevance shared by every candidate in the request). This is enough to demonstrate the funnel; per-user or per-campaign signals are not being added.
+- Superseded 2026-09-06: ranking order was originally static across requests, because relevance was per category and so common to every candidate. Campaigns now carry a per-segment affinity, making relevance a property of the user-campaign pair, so ranking order varies per request. See the utility auction decision below.
 - Pacing keeps the simple spend-versus-target probability. Because second-price charges sit below bid, the probability is fractional only inside a one-bid-wide band and behaves almost binarily. A later option, sequenced only if needed, is to make probability also depend on the fraction of total budget already spent.
 
 ## Progress and coordination
@@ -51,7 +51,7 @@ Initial fixture targets (tune and version before freezing the baseline):
 - 4,000 pre-generated requests, 20 static users, four categories.
 - 32 campaigns, initially eight per category, mixed impression/click/conversion objectives.
 - One ad slot per request; all campaigns bid and pay per impression.
-- Users have category relevance in [0, 1]. Campaigns have category, objective, fixed historical rates, maximum impression bid, and session budget.
+- Users have category relevance in [0, 1] and belong to a segment. Campaigns have category, objective, fixed historical rates, maximum impression bid, session budget, and an affinity in [0, 1] per segment.
 - Requests contain ID, simulated timestamp, user ID, category, and optional illustrative query text. Category alone drives retrieval.
 - No clicks/conversions are sampled; no prediction noise or changing user behavior.
 
@@ -60,21 +60,25 @@ Initial fixture targets (tune and version before freezing the baseline):
 1. Retrieve all campaigns matching the request category. Objectives label candidates and determine scoring; no random retrieval quota is needed.
 2. Exclude campaigns with remaining budget below the reserve price.
 3. Apply campaign-specific pacing admission.
-4. Score admitted campaigns, apply a fixed threshold, retain the top four qualifying candidates.
-5. Run a single-slot second-price auction among finalists.
+4. Compute quality for admitted campaigns, apply the fixed quality gate, then rank survivors by utility and retain the top four.
+5. Run a single-slot auction among finalists: highest utility wins, priced by the runner-up's utility adjusted for the winner's quality.
 6. Deduct the clearing price and record the complete trace, including empty auctions.
 
-Use deterministic score/bid tie-breaking by campaign ID and order requests by timestamp then request ID. A paced-out campaign cannot win or set a price.
+Use deterministic utility tie-breaking by campaign ID and order requests by timestamp then request ID. A paced-out campaign cannot win or set a price.
 
-### Ranking
+### Ranking and utility
 
 ```text
-score = fixed_normalized_objective_prediction × user_category_relevance
+relevance = user_category_relevance[category] x campaign_affinity[user_segment]
+quality   = fixed_normalized_engagement_prediction x relevance
+utility   = effective_bid x quality
 ```
 
-Normalize using fixed scenario parameters, not current candidate-pool statistics. The common user relevance multiplier changes threshold eligibility, not relative ordering within a request. Scores are educational objective proxies, not calibrated economic values. Exact objective formulas/scales and threshold are an M0 decision, not permission to invent new signals silently.
+Normalize engagement using fixed scenario parameters, not current candidate-pool statistics. Relevance is a
+property of the user-campaign pair, so ranking order varies between requests rather than being a fixed
+leaderboard per category. Quality decides participation through the gate; utility decides order.
 
-Confirmed objective bases (all clamped to [0, 1]):
+Confirmed engagement bases (all clamped to [0, 1]):
 
 ```text
 impression: quality_prior                      (seeded per campaign, in (0, 1])
@@ -82,7 +86,8 @@ click:      historical_ctr / ctr_scale
 conversion: historical_cvr / cvr_scale         (per-impression conversion rate)
 ```
 
-Scales are fixed scenario parameters chosen so a good campaign of any objective lands around 0.7–0.9. Because the shortlist is score-only, only campaigns in a category's score top four can ever support prices; the M2 fixture must deliberately decorrelate score rank from bid rank.
+Bids are kept within a narrow range, about 2.7x from top to bottom. If bids spanned an order of magnitude
+the bid term would decide every auction and quality would be decorative.
 
 ### Pacing
 
@@ -100,11 +105,20 @@ Known behaviour: since clearing prices are at or below bid, spend lags target an
 
 ```text
 effective_bid = min(bid_per_impression, remaining_budget)
-winner = finalist with highest effective_bid
-price = max(reserve, second_highest_effective_bid)
+utility       = effective_bid x quality
+winner        = finalist with highest utility
+price         = clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)
 ```
 
-Only finalists with effective bid at least the reserve participate. One bidder pays reserve; no bidders means no winner and zero spend. Store all monetary amounts in integer microdollars and validate safe ranges. Reserve must be positive. Target and probability may use fractional arithmetic; actual charges remain integers.
+Only finalists with effective bid at least the reserve participate. The winner pays the least it could have
+bid and still stayed ahead of the runner-up, which means better quality buys the same position for less. One
+bidder pays reserve; no bidders means no winner and zero spend. Store all monetary amounts in integer
+microdollars and validate safe ranges. Reserve must be positive. Targets, qualities and utilities may use
+fractional arithmetic; actual charges remain integers.
+
+Charging the runner-up's raw bid is not an option under utility ranking: the runner-up may outbid the
+winner, so the winner would be charged above its own maximum, and capping there would remove the advantage
+quality is supposed to confer.
 
 ### Comparability and interpretation
 
@@ -154,11 +168,11 @@ Tasks:
 - [x] Generate deterministic users, campaigns, and timestamped requests for the six-hour session.
 - [x] Include uneven traffic and substantial late traffic in every category.
 - [x] Include several strong bidders with finite budgets, medium price-support bidders, and funded lower bidders per category.
-- [x] Ensure ranking scores/threshold do not collapse most auctions to zero or one participant. Include all objectives in score-qualified candidates.
+- [x] Ensure ranking scores/threshold do not collapse most auctions to zero or one participant. Include all objectives in quality-qualified candidates.
 - [x] Run pacing on/off and produce a reproducible diagnostic report (`npm run diagnose`).
 - [x] Freeze/version the baseline seed and parameter values after inspection; retain the report.
 
-Report: score-qualified request coverage, filled requests, multiple-bidder auction share, budget-exhaustion times, early/late participant counts and prices, campaign spend trajectories, final revenue, and unspent budgets. Separate threshold qualification from pacing/shortlist attrition.
+Report: quality-qualified request coverage, filled requests, multiple-bidder auction share, budget-exhaustion times, early/late participant counts and prices, campaign spend trajectories, final revenue, and unspent budgets. Separate threshold qualification from pacing/shortlist attrition.
 
 Gate: accounting invariants pass for both modes; the report demonstrates understandable spend-pattern differences and assesses late competition. If it does not illustrate the intended lesson, discuss fixture tuning with the human before UI polish. Higher paced revenue is not a correctness assertion. Confirm an explicit coverage target with the human rather than treating “majority” as an unstated numeric requirement.
 
@@ -214,7 +228,7 @@ Tasks:
 - [ ] Show competition and clearing-price time series with units and empty-auction semantics clearly labeled.
 - [ ] Overlay matching on/off runs only; explain incompatible comparisons rather than silently allowing them.
 - [ ] Build paginated request list tied to the playback cursor and a detail side sheet.
-- [ ] Explain retrieval, exclusions, pacing, scores, shortlist, bids, runner-up, price, and budget changes in the side sheet.
+- [ ] Explain retrieval, exclusions, pacing, quality, utility ranking, shortlist, bids, runner-up, quality-adjusted price, and budget changes in the side sheet.
 - [ ] Include loading, failure, empty-auction, and no-run states; make the side sheet keyboard usable.
 
 Playback contract: five-minute buckets (72 points), with metrics advancing at bucket boundaries. Do not imply exact request-level interpolation. Fetch detailed traces only when needed. Current metrics and visible request cutoffs must agree with the cursor; label final-run summaries separately. Average clearing price is over filled impressions; distinguish no sales from a zero price.
@@ -246,9 +260,9 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Question | Proposed default | Status |
 | --- | --- | --- |
 | Package manager, ORM, tests/charts | npm; Drizzle + node-postgres (M3); Vitest; Recharts | Confirmed 2026-09-06 |
-| Objective score definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp bases to [0,1], then multiply relevance | Confirmed 2026-09-06 |
-| Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics; scales chosen so a good campaign of any objective scores about 0.7–0.9 | Numeric values selected in M2 |
-| Threshold-qualified coverage target | At least 90% of requests have two score-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
+| Engagement definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp to [0,1], then multiply by pair relevance to give quality | Confirmed 2026-09-06 |
+| Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics. Bids span only about 2.7x so quality is not swamped by bid; budgets are calibrated against both modes | Numeric values selected in M2 |
+| Quality-qualified coverage target | At least 90% of requests have two quality-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
 | Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
 | Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
 | Database | Neon Postgres, added after the basic simulator works; in-memory store until then | Confirmed 2026-09-06 |
@@ -315,3 +329,14 @@ Remaining blockers / next owner:
 - Result (baseline-2, input hash `5de9b9537dcce8b2`): campaigns delivering at least 95% of budget are 30 of 32 unpaced and 31 of 32 paced, both above the 90% target. Unspent budget fell from $281.80 to $23.59 unpaced and from $423.77 to $5.79 paced. Revenue is now nearly equal across modes, $2,129.98 unpaced against $2,147.78 paced, which is expected once both modes spend nearly every budget. Unpaced fill is 74.7% against 90.1% paced: the unpaced market now visibly burns out, filling 357 of the last hour's 1,168 requests against 984 paced, and the last-hour price is $0.23 against $0.39.
 - Decisions / deviations: the diagnostics report now leads with spend-share delivery at the 95% and 99% bars and labels the reserve-based count as knife-edge. The M2 gate asserts at least 90% delivery in both modes. An earlier gate assertion that unpaced fill exceeds 80% was removed, because burn-out is now the intended unpaced behaviour. Scenario versions bumped to `baseline-2` and `small-2`.
 - Commands run and outcomes: `npx vitest run` 44/44 passed; `npm run diagnose` rewrote `docs/m2-diagnostics.md`; `npm run typecheck` OK; `npm run lint` OK.
+
+### Utility auction chunk
+
+- Date / task / owner: 2026-09-06 / replace the bid-only auction with a utility auction / Claude (coordinating assistant).
+- Why: with a bid-only auction, quality controlled participation but never the outcome, so a campaign's achievable spend was determined entirely by its rank in the bid ladder. The cheapest bidders could only win once everyone above them was out of budget or paced out.
+- Change to the locked contract, approved by the human before implementation: ranking is now by utility, which is effective bid times quality. Quality is engagement times relevance, and relevance is now a property of the user-campaign pair, since campaigns carry an affinity per user segment. The winner pays `clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)`.
+- Why the price is quality-adjusted: under utility ranking the runner-up can outbid the winner, so charging the runner-up's raw bid would charge the winner above its own maximum. Capping at the winner's bid would then take the entire surplus every time quality decided the outcome, teaching the opposite of the intended lesson. The quality-adjusted price is the least the winner could have bid and still stayed ahead, and it is automatically at or below the winner's effective bid.
+- Supporting changes: bids narrowed to a 2.7x range so the bid term does not swamp quality; a `RankingStage` added to traces so the funnel reads gate, rank, auction; `priceBasis` recorded on each request; budgets recalibrated; `ENGINE_VERSION` bumped to 0.2.0 and scenarios to `baseline-3` and `small-3`.
+- Results (baseline-3, input hash `921eb4604bdb22a8`): all 32 campaigns deliver at least 95% of budget in both modes, with unspent budget of $1.38 unpaced and $6.94 paced. Quality decides a large share of outcomes: in 67.7% of contested unpaced auctions the winner was outbid by a losing participant, and 41.4% paced. Coverage rose to 98.6%. Revenue is $2,152.76 unpaced against $2,147.20 paced.
+- Known tension: because budgets are now sized to be fully deliverable, the unpaced market exhausts before the session ends and the last hour fills only 129 of 1,168 requests at the reserve price, against 983 at $0.38 paced. Full delivery and a lively unpaced endgame cannot both hold; the human asked for delivery.
+- Commands run and outcomes: `npx vitest run` 49/49 passed; `npm run diagnose` rewrote `docs/m2-diagnostics.md`; `npm run typecheck` OK; `npm run lint` OK.

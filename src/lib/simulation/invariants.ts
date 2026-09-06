@@ -44,12 +44,24 @@ export function checkInvariants(snapshot: ScenarioSnapshot, output: RunOutput): 
 
     const winner = winners[0];
     if (winner) {
-      if (!winner.auction.evaluated) {
-        problems.push(`request ${trace.requestId} winner has no auction stage`);
-      } else if (trace.priceMicros > winner.auction.effectiveBidMicros) {
+      if (!winner.auction.evaluated || !winner.ranking.evaluated) {
+        problems.push(`request ${trace.requestId} winner has no auction or ranking stage`);
+      } else if (trace.priceMicros > winner.ranking.effectiveBidMicros) {
         problems.push(
-          `request ${trace.requestId} price ${trace.priceMicros} exceeds the winner's effective bid ${winner.auction.effectiveBidMicros}`,
+          `request ${trace.requestId} price ${trace.priceMicros} exceeds the winner's effective bid ${winner.ranking.effectiveBidMicros}`,
         );
+      }
+      // Ranking by utility means the winner must hold the highest utility of any participant.
+      if (winner.ranking.evaluated) {
+        for (const other of trace.candidates) {
+          if (other.campaignId === winner.campaignId) continue;
+          if (!other.ranking.evaluated || !other.auction.evaluated || !other.auction.participates) continue;
+          if (other.ranking.utility > winner.ranking.utility) {
+            problems.push(
+              `request ${trace.requestId}: ${other.campaignId} had higher utility than the winner ${winner.campaignId}`,
+            );
+          }
+        }
       }
       if (winner.budgetAfterMicros !== winner.budgetBeforeMicros - trace.priceMicros) {
         problems.push(`request ${trace.requestId} winner balance was not reduced by the clearing price`);
@@ -63,6 +75,16 @@ export function checkInvariants(snapshot: ScenarioSnapshot, output: RunOutput): 
         candidate.outcome === "excluded_pacing" ||
         candidate.outcome === "excluded_threshold" ||
         candidate.outcome === "excluded_shortlist";
+      if (
+        (candidate.outcome === "excluded_budget" ||
+          candidate.outcome === "excluded_pacing" ||
+          candidate.outcome === "excluded_threshold") &&
+        candidate.ranking.evaluated
+      ) {
+        problems.push(
+          `request ${trace.requestId}: campaign ${candidate.campaignId} was ${candidate.outcome} but was still ranked`,
+        );
+      }
       if (excludedBeforeAuction && candidate.auction.evaluated) {
         problems.push(
           `request ${trace.requestId}: campaign ${candidate.campaignId} was ${candidate.outcome} but still entered the auction`,

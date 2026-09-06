@@ -6,13 +6,20 @@ import type {
   RunOutput,
   RunSummary,
   ScenarioSnapshot,
-  ScoringStage,
   SimRequest,
   User,
 } from "../contracts";
-import { runAuction, type Finalist } from "./auction";
+import { effectiveBid, runAuction, type Finalist } from "./auction";
 import { decidePacing } from "./pacing";
-import { compareByScoreDesc, score as scoreOf, userRelevance } from "./scoring";
+import {
+  baseScore,
+  categoryRelevance,
+  compareByUtilityDesc,
+  pairRelevance,
+  qualityScore,
+  segmentAffinity,
+  utilityOf,
+} from "./scoring";
 import { validateSnapshot } from "./snapshot";
 import { buildTimeline } from "./timeline";
 
@@ -29,9 +36,9 @@ export function isBudgetEligible(remainingMicros: Micros, reserveMicros: Micros)
 interface WorkingCandidate {
   campaign: Campaign;
   trace: CandidateTrace;
-  /** Rank order key; only set for threshold-qualified candidates. */
-  score: number;
   campaignId: string;
+  quality: number;
+  utility: number;
 }
 
 /**
@@ -39,6 +46,10 @@ interface WorkingCandidate {
  *
  * Pure: no I/O, no wall-clock, no shared mutable state beyond the local balance map. Given the same snapshot
  * and mode it always produces identical output. Balances start fresh, so the two modes are directly comparable.
+ *
+ * The funnel is: retrieve by category, drop campaigns that cannot pay the reserve, apply pacing admission,
+ * apply the quality gate, rank the survivors by utility and keep the top few, then run a single-slot auction
+ * priced on the runner-up's utility adjusted for the winner's quality.
  */
 export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): RunOutput {
   validateSnapshot(snapshot);
@@ -58,12 +69,11 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
     if (!user) throw new RangeError(`request ${request.id} references unknown user ${request.userId}`);
 
     const retrieved = retrieve(snapshot.campaigns, request.category);
-    const relevance = userRelevance(user, request.category);
 
-    // Diagnostic only: score qualification before budget and pacing attrition.
+    // Diagnostic only: quality qualification before budget and pacing attrition.
     let thresholdQualifiedCount = 0;
     for (const campaign of retrieved) {
-      if (scoreOf(campaign, user, config) >= config.scoreThreshold) thresholdQualifiedCount += 1;
+      if (qualityScore(campaign, user, config) >= config.qualityThreshold) thresholdQualifiedCount += 1;
     }
 
     const candidates: WorkingCandidate[] = [];
@@ -88,10 +98,17 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
         },
         pacing: { evaluated: false },
         scoring: { evaluated: false },
+        ranking: { evaluated: false },
         auction: { evaluated: false },
         outcome: "excluded_budget",
       };
-      const candidate: WorkingCandidate = { campaign, trace, score: 0, campaignId: campaign.id };
+      const candidate: WorkingCandidate = {
+        campaign,
+        trace,
+        campaignId: campaign.id,
+        quality: 0,
+        utility: 0,
+      };
       candidates.push(candidate);
       if (!eligible) continue;
 
@@ -112,40 +129,53 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
         continue;
       }
 
-      const value = scoreOf(campaign, user, config);
-      const passedThreshold = value >= config.scoreThreshold;
-      const scoring: ScoringStage = {
+      const base = baseScore(campaign, config);
+      const relevance = pairRelevance(campaign, user);
+      const quality = base * relevance;
+      const passedThreshold = quality >= config.qualityThreshold;
+      trace.scoring = {
         evaluated: true,
-        base: relevance === 0 ? value : value / relevance,
+        base,
+        categoryRelevance: categoryRelevance(user, campaign.category),
+        affinity: segmentAffinity(campaign, user),
         relevance,
-        score: value,
+        quality,
         passedThreshold,
-        shortlisted: false,
       };
-      trace.scoring = scoring;
-      candidate.score = value;
+      candidate.quality = quality;
       if (!passedThreshold) {
         trace.outcome = "excluded_threshold";
         continue;
       }
+
+      const bid = effectiveBid(campaign.bidMicros, budgetBefore);
+      candidate.utility = utilityOf(bid, quality);
+      trace.ranking = {
+        evaluated: true,
+        effectiveBidMicros: bid,
+        utility: candidate.utility,
+        rank: 0,
+        shortlisted: false,
+      };
       trace.outcome = "excluded_shortlist";
       qualified.push(candidate);
     }
 
-    qualified.sort(compareByScoreDesc);
+    qualified.sort(compareByUtilityDesc);
     qualified.forEach((candidate, index) => {
-      const scoring = candidate.trace.scoring;
-      if (scoring.evaluated) scoring.rank = index + 1;
+      const ranking = candidate.trace.ranking;
+      if (ranking.evaluated) ranking.rank = index + 1;
     });
 
     const shortlisted = qualified.slice(0, config.shortlistSize);
     const finalists: Finalist[] = shortlisted.map((candidate) => {
-      const scoring = candidate.trace.scoring;
-      if (scoring.evaluated) scoring.shortlisted = true;
+      const ranking = candidate.trace.ranking;
+      if (ranking.evaluated) ranking.shortlisted = true;
       return {
         campaignId: candidate.campaignId,
         bidMicros: candidate.campaign.bidMicros,
         remainingMicros: remaining.get(candidate.campaignId) ?? 0,
+        quality: candidate.quality,
       };
     });
 
@@ -160,12 +190,7 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
           : entrant.campaignId === auction.runnerUpCampaignId
             ? "runner_up"
             : "other";
-      candidate.trace.auction = {
-        evaluated: true,
-        effectiveBidMicros: entrant.effectiveBidMicros,
-        participates: entrant.participates,
-        role,
-      };
+      candidate.trace.auction = { evaluated: true, participates: entrant.participates, role };
       candidate.trace.outcome = !entrant.participates
         ? "excluded_reserve"
         : entrant.campaignId === auction.winnerCampaignId
@@ -188,7 +213,7 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
       }
     }
 
-    // Shortlist first in rank order, then the remaining candidates by campaign id.
+    // Shortlist first in utility rank order, then the remaining candidates by campaign id.
     const shortlistIds = shortlisted.map((candidate) => candidate.campaignId);
     const shortlistSet = new Set(shortlistIds);
     const rest = candidates
@@ -210,6 +235,7 @@ export function simulate(snapshot: ScenarioSnapshot, pacingEnabled: boolean): Ru
       winnerCampaignId: auction.winnerCampaignId,
       runnerUpCampaignId: auction.runnerUpCampaignId,
       priceMicros: auction.priceMicros,
+      priceBasis: auction.priceBasis,
       filled: auction.winnerCampaignId !== null,
     });
   }

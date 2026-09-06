@@ -13,18 +13,29 @@ Numeric and ordering details that the plan leaves to M0. Types live in `src/lib/
 - Request timestamps are in `[0, sessionDurationMs)`. Requests are processed in ascending `(timestampMs, id)` order.
 - Bucket `i` covers `[i * bucket, (i + 1) * bucket)`. Cumulative series are reported at bucket end, so the 72nd bucket is the 6 h closing point.
 
-## Scores
+## Quality, utility, and the gate
 
 ```text
-impression: base = quality_prior                (seeded per campaign, in (0, 1])
-click:      base = historical_ctr / ctr_scale
-conversion: base = historical_cvr / cvr_scale   (per-impression conversion rate)
-score      = clamp(base, 0, 1) * user_relevance[category]
+impression: engagement = quality_prior                (seeded per campaign, in (0, 1])
+click:      engagement = historical_ctr / ctr_scale
+conversion: engagement = historical_cvr / cvr_scale   (per-impression conversion rate)
+
+relevance = user_category_relevance[category] * campaign_affinity[user_segment]
+quality   = clamp(engagement, 0, 1) * relevance
+utility   = effective_bid * quality
 ```
 
-Scales are scenario constants. A candidate qualifies when `score >= scoreThreshold`. Qualified candidates are ranked by score descending, ties by campaign id ascending; the top `shortlistSize` (4) proceed.
+Relevance is a property of the user-campaign pair, not of the category alone. Because a campaign's affinity
+differs by segment, ranking order changes from request to request rather than being a fixed leaderboard.
 
-Because relevance is shared by all candidates in a request, ranking order within a category is identical for every request; only the threshold cut varies by user.
+`quality >= qualityThreshold` passes the gate. Survivors are ranked by utility descending, ties by campaign
+id ascending, and the top `shortlistSize` (4) reach the auction. Quality decides participation; utility
+decides order.
+
+## Scales
+
+Scales are scenario constants. `ctrScale` and `cvrScale` normalise historical rates onto a common [0, 1]
+engagement axis so objectives are comparable.
 
 ## Pacing
 
@@ -42,10 +53,25 @@ admitted    = draw < probability
 1. Retrieve campaigns with `campaign.category === request.category`.
 2. Exclude when `remaining < reserve` (outcome `excluded_budget`).
 3. Pacing admission (outcome `excluded_pacing`).
-4. Score, threshold (`excluded_threshold`), shortlist (`excluded_shortlist`).
-5. `effectiveBid = min(bid, remaining)`; finalists with `effectiveBid >= reserve` participate; others `excluded_reserve` (unreachable after step 2 but recorded for completeness).
-6. Winner = highest effective bid, ties by campaign id ascending. Price = `max(reserve, second-highest effective bid)`; a sole participant pays the reserve. No participants means no winner and price 0.
-7. Deduct the price from the winner's balance. Invariant: price <= winner's effective bid <= remaining budget, so balances never go negative.
+4. Quality gate (`excluded_threshold`), then rank by utility and shortlist (`excluded_shortlist`).
+5. `effectiveBid = min(bid, remaining)`; finalists with `effectiveBid >= reserve` participate; others
+   `excluded_reserve` (unreachable after step 2 but recorded for completeness).
+6. Winner = highest utility, ties by campaign id ascending. The winner pays the least it could have bid and
+   still stayed ahead of the runner-up:
+
+```text
+price = clamp(round(runner_up_utility / winner_quality), reserve, winner_effective_bid)
+```
+
+   A sole participant pays the reserve. No participants means no winner and price 0.
+7. Deduct the price from the winner's balance.
+
+Because `winner_utility >= runner_up_utility`, the raw quotient never exceeds the winner's effective bid, so
+balances cannot go negative; the clamp guards the floating-point division. Charging the runner-up's raw bid
+instead would be incoherent here: the runner-up can outbid the winner, so the winner would be asked to pay
+above its own maximum, and capping there would take the whole surplus every time quality decided the result.
+
+Higher quality lowers the price for the same position, which is what makes quality worth having.
 
 ## Comparability
 

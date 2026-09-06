@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseScore } from "./scoring";
+import { qualityScore } from "./scoring";
 import { BASELINE_PRESET, SMALL_PRESET, smallScenario } from "../fixtures/presets";
 import { simulate } from "./engine";
 import { allocate, generateScenario, trafficWeight } from "./generate";
@@ -37,14 +37,25 @@ describe("scenario generation", () => {
     }
   });
 
-  it("does not let bid rank stand in for score rank", () => {
+  it("gives every campaign a segment it targets well and one it does not", () => {
+    for (const campaign of scenario.campaigns) {
+      const values = scenario.segments.map((s) => campaign.affinity[s] ?? 0);
+      expect(Math.max(...values)).toBeGreaterThan(0.8);
+      expect(Math.min(...values)).toBeLessThan(0.4);
+    }
+    expect(new Set(scenario.users.map((u) => u.segment)).size).toBeGreaterThan(1);
+  });
+
+  it("does not let bid rank stand in for quality rank", () => {
     const category = scenario.categories[0];
     const campaigns = scenario.campaigns.filter((c) => c.category === category);
     const byBid = [...campaigns].sort((a, b) => b.bidMicros - a.bidMicros).map((c) => c.id);
-    const byScore = [...campaigns]
-      .sort((a, b) => baseScore(b, scenario.config) - baseScore(a, scenario.config))
-      .map((c) => c.id);
-    expect(byScore).not.toEqual(byBid);
+    for (const user of scenario.users) {
+      const byQuality = [...campaigns]
+        .sort((a, b) => qualityScore(b, user, scenario.config) - qualityScore(a, user, scenario.config))
+        .map((c) => c.id);
+      expect(byQuality).not.toEqual(byBid);
+    }
   });
 
   it("spreads traffic unevenly with substantial late volume in every category", () => {
@@ -77,7 +88,7 @@ describe("small-preset runs", () => {
     expect(checkInvariants(scenario, paced)).toEqual([]);
   });
 
-  it("reaches the score-qualified coverage target", () => {
+  it("reaches the quality-qualified coverage target", () => {
     const coverage = unpaced.summary.thresholdQualifiedPairRequests / unpaced.summary.totalRequests;
     expect(coverage).toBeGreaterThanOrEqual(0.9);
     expect(paced.summary.thresholdQualifiedPairRequests).toBe(unpaced.summary.thresholdQualifiedPairRequests);
@@ -92,7 +103,7 @@ describe("small-preset runs", () => {
     const objectives = new Set<string>();
     for (const trace of unpaced.traces) {
       for (const candidate of trace.candidates) {
-        if (candidate.scoring.evaluated && candidate.scoring.shortlisted) objectives.add(candidate.objective);
+        if (candidate.ranking.evaluated && candidate.ranking.shortlisted) objectives.add(candidate.objective);
       }
     }
     expect(objectives.size).toBe(3);

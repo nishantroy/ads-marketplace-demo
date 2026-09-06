@@ -5,6 +5,12 @@ export type Category = string;
 
 export type Objective = "impression" | "click" | "conversion";
 
+/**
+ * A user segment, e.g. "bargain". Campaigns declare an affinity per segment, which is what makes
+ * relevance a property of the user-campaign pair rather than of the category alone.
+ */
+export type Segment = string;
+
 export const OBJECTIVES: readonly Objective[] = ["impression", "click", "conversion"];
 
 /** Fixed scenario parameters. Normalisation uses these, never live candidate-pool statistics. */
@@ -15,9 +21,9 @@ export interface ScenarioConfig {
   bucketDurationMs: number;
   /** Auction reserve price. Must be positive. */
   reserveMicros: Micros;
-  /** Minimum score to qualify for the shortlist, in [0, 1]. */
-  scoreThreshold: number;
-  /** Maximum number of score-qualified candidates that reach the auction. */
+  /** Minimum quality to pass the gate, in [0, 1]. Quality is engagement x pair relevance. */
+  qualityThreshold: number;
+  /** Maximum number of quality-qualified candidates that reach the auction, ranked by utility. */
   shortlistSize: number;
   /** Fixed scale that maps a historical click-through rate to a [0, 1] base score. */
   ctrScale: number;
@@ -28,6 +34,8 @@ export interface ScenarioConfig {
 export interface User {
   id: string;
   name: string;
+  /** Which segment this user belongs to; campaigns target segments. */
+  segment: Segment;
   /** Relevance of each category to this user, in [0, 1]. Missing category means 0. */
   relevance: Record<Category, number>;
 }
@@ -40,6 +48,12 @@ interface CampaignBase {
   bidMicros: Micros;
   /** Session budget. Must be positive. */
   budgetMicros: Micros;
+  /**
+   * How well this campaign fits each user segment, in [0, 1]. A missing segment means 0.
+   * Combined with the user's category relevance this gives a per-pair relevance, so ranking order can
+   * differ from one request to the next instead of being a fixed leaderboard.
+   */
+  affinity: Record<Segment, number>;
 }
 
 export type Campaign = CampaignBase &
@@ -70,6 +84,7 @@ export interface ScenarioSnapshot {
   /** Seed string used both for scenario generation and for request–campaign keyed pacing randomness. */
   seed: string;
   categories: Category[];
+  segments: Segment[];
   config: ScenarioConfig;
   users: User[];
   campaigns: Campaign[];

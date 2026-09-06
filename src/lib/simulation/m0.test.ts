@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { tinyScenario } from "../fixtures/tiny";
 import { assertMicros, dollars, MAX_MONEY_MICROS } from "../contracts";
 import { fnv1a32, stableRandom, stableStringify } from "./hash";
-import { baseScore, score } from "./scoring";
+import { baseScore, qualityScore } from "./scoring";
 import { inputHash, validateSnapshot } from "./snapshot";
 
 describe("M0 contracts", () => {
@@ -22,13 +22,17 @@ describe("M0 contracts", () => {
     expect(dollars(0.1)).toBe(100_000);
   });
 
-  it("computes the documented base scores", () => {
+  it("computes the documented engagement bases and qualities", () => {
     const [c1, c2, c3] = tinyScenario.campaigns;
     const cfg = tinyScenario.config;
     expect(baseScore(c1, cfg)).toBeCloseTo(0.9);
     expect(baseScore(c2, cfg)).toBeCloseTo(0.8);
     expect(baseScore(c3, cfg)).toBeCloseTo(0.5);
-    expect(score(c1, tinyScenario.users[1], cfg)).toBeCloseTo(0.45);
+    const [u1, u2] = tinyScenario.users;
+    // Quality is engagement x category relevance x segment affinity, so it differs by user.
+    expect(qualityScore(c1, u1, cfg)).toBeCloseTo(0.45);
+    expect(qualityScore(c2, u1, cfg)).toBeCloseTo(0.8);
+    expect(qualityScore(c2, u2, cfg)).toBeCloseTo(0.2);
   });
 
   it("stable hashing is deterministic, keyed, and in [0, 1)", () => {
