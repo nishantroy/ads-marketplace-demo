@@ -82,3 +82,67 @@ Explain the chain: budget runs out → campaign leaves → fewer bidders → pot
 - Have we avoided asserting that pacing must win?
 
 For this prototype, prioritize functionality and human visual review. Automated UI/playback testing is deferred; continue basic typecheck, lint, and build validation.
+
+## Guided narrative interaction pattern (confirmed 2026-09-06)
+
+This section supersedes the toggle-and-run-button pattern described in "Practical UI defaults" and in M4's
+shipped task list. It does not change the simulation model, the API, or what data is available — only how
+the workspace sequences and presents it. Brainstormed and confirmed with the human; not yet implemented.
+
+### Remove the run decision point
+
+Do not ask the user to choose a pacing mode and press Run. Both modes are computed automatically together,
+with no user action required: on first load, and again after a reset. There is no pacing toggle and no Run
+button in the redesigned workspace. This removes the single biggest "which button do I press first" choice
+without losing anything, since computing both 4,000-request modes takes a fraction of a second.
+
+### A short guided sequence, not a dashboard
+
+Present the workspace as a small number of steps, advanced by a Next/Back click, not by scroll-hijacking or
+auto-advancing animation:
+
+1. **Intro** — one short framing card: the question this demo answers ("what changes when advertisers
+   spread their spending over time?") and what to watch for. Skippable and non-blocking; a returning user
+   should never have to click through it to reach the workspace.
+2. **Unpaced unfolds** — the pacing-off run's primary chart plays out alone, so the learner first sees the
+   baseline behavior (budgets front-load, the market can go quiet late) without a second series competing
+   for attention.
+3. **Paced unfolds** — the pacing-on run is introduced on the same chart, so the learner sees the same
+   story with one variable changed.
+4. **Comparison** — both series shown together for the full session, with the delta called out in plain
+   language (following principle 3, connect outcome to cause).
+5. **Explore** — the guided sequence ends here and hands off to free exploration: scrub, change speed,
+   select a campaign, inspect a request. Nothing is locked behind the sequence; a user can jump to Explore
+   at any time instead of stepping through.
+
+Both runs are computed before step 1 begins; the steps control what is *revealed*, not what is *computed*.
+This keeps the pedagogical sequencing (introduce one variable at a time) without reintroducing a decision
+point or a wait.
+
+### Charts: one primary, split secondary comparisons
+
+The primary chart (marketplace revenue/spend) shows both modes as two synced lines on one chart, sharing an
+axis and cursor, per principle 4 — never two separate panels for this one.
+
+Two more paired time series, each shown as its own synced-pair chart, are needed to explain *why* revenue
+differs and are revealed progressively (principle 2's "Explanation" tier, opened on request rather than
+shown by default):
+
+- **Competing campaigns** — participant count per bucket, off vs. on, so a learner can see pacing narrowing
+  or widening the field over the session.
+- **Clearing price** — average price per filled impression per bucket, off vs. on, distinguishing empty
+  buckets from a zero price per the existing rule.
+
+All three charts share the same time cursor once both runs exist, so scrubbing moves all of them together.
+
+### Request inspection stays side by side, not overlaid
+
+When a learner inspects a request at a given moment, show two funnel panels at the same cursor position —
+one per pacing mode — rather than a single funnel with a mode switch. The interesting content is often "the
+same moment played out differently," which reads more clearly as two panels than as one panel toggled.
+
+### Shared cursor in Explore
+
+From the comparison step onward (including Explore), one time cursor scrubs both runs' timelines together.
+Scrubbing shows how each mode performs at the same simulated moment side by side, rather than requiring the
+user to scrub each mode's timeline separately.

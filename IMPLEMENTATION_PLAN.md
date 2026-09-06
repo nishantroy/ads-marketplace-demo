@@ -242,6 +242,17 @@ Playback contract: five-minute buckets (72 points), with metrics advancing at bu
 
 Gate (prototype): manual browser check that controls, error/empty states, matched overlays, and the side sheet work; playback never mutates results; requests do not leak beyond the cursor; a side sheet agrees with its persisted trace. Changing the pacing toggle affects the next run, never relabels the displayed run. Automated UI tests are deferred.
 
+### Interaction redesign (confirmed, not yet implemented)
+
+Supersedes the pacing toggle and manual Run button above. The human's 2026-09-06 decision, documented in
+[docs/ui-design-principles.md](docs/ui-design-principles.md#guided-narrative-interaction-pattern-confirmed-2026-09-06):
+both modes compute automatically with no user decision point, a short click-through sequence (intro,
+unpaced, paced, comparison, explore) replaces the always-on dashboard, competing-campaign-count and
+clearing-price get their own synced-pair charts revealed on request, request inspection becomes two
+side-by-side funnel panels instead of a single mode-switched one, and one shared cursor scrubs both runs
+from the comparison step onward. This is a presentation redesign only; it does not change the API, the
+engine, or the shipped M4 data-fetching behavior above. Implementation is a follow-up chunk, not done here.
+
 ## M5 — End-to-end verification and handoff
 
 Tasks:
@@ -274,6 +285,7 @@ Gate: engine/unit tests and typecheck pass; the documented manual demo flow work
 | Engagement definitions | Impression: seeded per-campaign quality prior in (0,1]; click: historical CTR / fixed CTR scale; conversion: per-impression conversion rate / fixed conversion scale; clamp to [0,1], then multiply by pair relevance to give quality | Confirmed 2026-09-06 |
 | Rates, budgets, bids, reserve, threshold | Versioned fixture parameters, tuned via M2 diagnostics. Bids span only about 2.7x so quality is not swamped by bid; budgets are calibrated against both modes | Numeric values selected in M2 |
 | Quality-qualified coverage target | At least 90% of requests have two quality-qualified, category-matching campaigns before budget/pacing exclusions | Confirmed 2026-09-06 |
+| Interaction pattern | Guided narrative, confirmed 2026-09-06, documented in [docs/ui-design-principles.md](docs/ui-design-principles.md#guided-narrative-interaction-pattern-confirmed-2026-09-06). Both pacing modes compute automatically, no toggle or Run button; a short click-through sequence (intro, unpaced, paced, comparison, explore) reveals them; one shared cursor scrubs both once both exist; request inspection is two side-by-side funnel panels. Supersedes the shipped pacing-toggle/Run-button pattern; not yet implemented | Confirmed 2026-09-06 |
 | Persistence | No database, Neon/Postgres, or history. Server memory holds only the latest completed result per pacing mode; replacement/reset clears old results. | Confirmed 2026-09-06; live-demo API merged |
 | Time boundaries | Request timestamps in [0, 6 hours); append closing timeline point at 6 hours | Confirmed 2026-09-06 |
 | Ports | App 3002, test server 3012; database is Neon (remote), so no local Postgres port | Confirmed 2026-09-06 |
