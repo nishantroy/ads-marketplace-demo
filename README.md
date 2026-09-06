@@ -104,10 +104,16 @@ counts a paced campaign holding a few cents as incomplete, which understates pac
 campaigns against 31 on the same run. Late competition likewise shows up in the price the survivors pay,
 not in how many candidates were admitted, since pacing throttles admissions by design.
 
-Campaign budgets are not free parameters either. A campaign can only spend what it can win, and the
-cheapest bidders only win once the tiers above them are out of budget or paced out. Budgets are therefore
-sized as target impressions times the price each tier pays when it wins, which is what lets at least 90% of
-campaigns deliver their budget in both modes.
+Campaign budgets are not free parameters either. Pacing controls when a campaign is allowed to bid, but it
+cannot make that campaign win, so a budget larger than what a campaign can win at its bid will underspend
+however pacing is configured. The signature of that in a trace is an admission probability pinned at 1: the
+campaign is so far behind its target that pacing admits it to every auction, and it still loses on bid.
+Budgets are therefore sized as target impressions times the price each tier pays when it wins, which is what
+lets at least 90% of campaigns deliver their budget in both modes.
+
+Pacing does throttle the strong bidders, and it does leave room for cheaper ones. On the current baseline
+the two strongest tiers are held out of roughly 80% of the auctions they are evaluated for, and the cheapest
+tier wins 183 auctions it would otherwise never see.
 
 What exists today (after M2): the shared types, the pure engine, the seeded marketplace generator with both
 presets, the paired-run diagnostics, and the invariant checker, all covered by unit tests. The API and the
