@@ -39,28 +39,42 @@ npm run diagnose     # regenerate docs/m2-diagnostics.md, the paired-run report 
 ```
 
 There is nothing to configure: opening the app computes both runs and starts the guide. Each stage has its
-own URL (`/how-it-works`, `/briefing`, `/pacing-off`, `/pacing-on`, `/compare`, `/explore`), so a reload
+own URL (`/marketplace`, `/how-it-works`, `/briefing`, `/pacing-off`, `/pacing-on`, `/compare`, `/explore`, `/explore-requests`), so a reload
 lands back where you were and the browser's back/forward buttons move through the guide. A rail on the
 right jumps to any stage; nothing is locked behind watching a stage play out.
 
 1. **Opening** — the question the demo answers.
-2. **How it works** — one request walked through the seven funnel stages (arrive → retrieve → budget &
+2. **The marketplace** — why users search, why advertisers pay for attention, and why the platform balances
+   relevance, advertiser value, and short- and long-term revenue rather than just taking the highest bid.
+   Defines campaigns, objectives, bids, and budgets, and distinguishes the working auction simulation from
+   unmodelled purchases, profit, and satisfaction.
+3. **How it works** — one request walked through the seven funnel stages (arrive → retrieve → budget &
    pacing → quality gate → rank by utility → auction → winner), with each stage's vocabulary defined as you
    reach it.
-3. **Briefing** — the experiment: two identical sessions, one difference. You commit to a prediction about
-   what pacing will do to revenue before you watch.
-4. **Pacing off** — the marketplace revenue curve animates in alone, so you see the front-loaded baseline
-   first.
-5. **Pacing on** — the same chart, the same requests, with pacing holding budget back against a
-   straight-line target.
-6. **Compare** — both curves complete, your prediction recalled, and the difference explained in plain
-   language.
-7. **Explore** — the guide hands off. *How pacing changes the auction* shows competing-campaign count and
-   clearing price per five-minute bucket, off against on. *Three campaign stories* are fixed teaching
-   examples (an immediate spender, a quiet-then-spike campaign, and a sharper version of the same) with
-   every number read live from the paired runs. *Follow one campaign* charts any campaign's spend against
-   its budget in both modes. *Inspect a request* lists requests with both modes' winners side by side, and
-   opens the two funnels for the same request next to each other.
+4. **Experiment setup** (still at `/briefing`) — live scenario counts and an explicit explanation of the
+   working end-to-end auction engine: simulated inputs, per-request budget deductions, identical starting
+   conditions, and recorded results rather than invented chart curves. Predict the revenue effect before watching.
+5. **Pacing off** — the marketplace revenue curve animates in alone. After playback, recorded results show
+   whole-session and hourly requests, impressions filled, fill rate, average impression price, and revenue,
+   with a final-hour callout.
+6. **Pacing on** — the same requests, with pacing holding budget back against a straight-line target;
+   its own completed results appear after playback. Once a mode finishes, revisiting it during the same
+   page visit shows the completed result without replaying. Reloading starts a fresh page visit.
+7. **Compare** — both revenue curves and one hourly table with shared Window/Requests columns and grouped
+   Pacing off/on columns for fill rate, average impression price, and revenue; plus the competition and impression-price
+   charts. The lesson is budget timing and late availability, not guaranteed revenue growth.
+   Counts and charges are summed from live timeline buckets; prices are total charges divided by filled requests,
+   never averages of bucket averages. With no impressions sold, average price is undefined (a gap / “No impressions”),
+   while revenue is $0. Early unfilled requests under pacing remain visible as a trade-off.
+8. **Explore campaigns** (`/explore`) — three teaching stories use live paired-run values; explore any
+   campaign's spend curve against its budget in both modes.
+9. **Explore individual requests** (`/explore-requests`) — the first 30 request rows are immediately visible,
+   with both modes' winners side by side. “See what happened in one auction” samples from the entire recorded
+   session through the existing sequence cursor API, not just these rows. The inspector's “See another” samples
+   a different request. This random navigation never changes simulation inputs or outcomes.
+   The full-page inspector leads with metadata and reading guidance, then prominent pacing-mode headings,
+   winners, charges, and before/after budgets above the paired funnels. “Inside this auction” exposes each
+   retrieved campaign's quality, pacing, ranking, and accounting details.
 
 Charts use amCharts 5. Its default attribution is retained and its license is served at
 [`/licenses/amcharts5-LICENSE.txt`](public/licenses/amcharts5-LICENSE.txt); review licensing before any
@@ -215,6 +229,28 @@ the same campaigns spread their budgets across the session and fill 631 of those
 $0.56. Revenue stays close — $2,126 against $2,114 — because both modes deliver essentially every
 campaign's budget (all 32 campaigns reach 95% of budget unpaced; 31 do paced).
 
+Whole-session fill is 2,779/4,000 (69.5%) off versus 3,831/4,000 (95.8%) on; average price per
+filled impression is $0.77 versus $0.55. Summing the recorded five-minute buckets gives:
+
+| Hour | Requests | Fill off | Fill on | Avg. price off | Avg. price on | Revenue off | Revenue on |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 675 | 100.0% | 92.9% | $0.97 | $0.54 | $654.24 | $341.55 |
+| 2 | 666 | 100.0% | 94.9% | $0.75 | $0.56 | $498.32 | $356.73 |
+| 3 | 654 | 100.0% | 97.2% | $0.81 | $0.55 | $531.60 | $351.98 |
+| 4 | 671 | 98.1% | 97.0% | $0.64 | $0.54 | $420.89 | $354.33 |
+| 5 | 676 | 18.6% | 96.7% | $0.17 | $0.54 | $20.96 | $354.46 |
+| 6 | 658 | 0.0% | 95.9% | No impressions | $0.56 | $0.00 | $354.63 |
+
+Prices are charges divided by filled requests, not averages of bucket averages. Unpaced prices do not fall
+monotonically (hour three rebounds), but their hourly range is much wider. The final hour has no unpaced
+price observation, not a $0 impression price. Pacing sacrifices some early fill while preserving late delivery.
+These rounded figures document the baseline; UI metrics are computed from live API results, not this table.
+
+The campaign stories are also fixture-specific: `travel-c0` spends $128.98 in hour one unpaced;
+`electronics-c2` spends most of its budget across **hours two and three**, not a single hour;
+`home-c5` spends only $0.40 across the first three hours, then $45.05 in hour four. Their paced spend
+extends across all six hours. These curves demonstrate timing, not measured advertiser profit or satisfaction.
+
 That is the honest lesson: pacing changes when budget is spent and keeps funded bidders in late auctions,
 but it does not promise more revenue. Budgets are calibrated against both modes so that nearly every
 campaign delivers, and the price of that is an unpaced endgame with almost nothing left to sell — full
@@ -267,5 +303,10 @@ Complete as a local prototype and deployed as a demo: shared contracts, the pure
 a determinism guard, the seeded marketplace and paired diagnostics, the invariant checker, the stateless
 live-demo API, and the guided UI. Verification is typecheck, lint, unit tests, and build, plus manual
 browser review; automated browser tests are intentionally not part of this build.
+
+The education/inspection UI pass changes presentation and navigation only: no simulation-engine, fixture,
+contract, or API changes. The full suite has 56 tests (including the 9 diagnostics checks). Random request
+selection is browser navigation over recorded results and does not affect engine determinism. New UI flows
+still rely on manual UX review; passing unit tests is not a claim of automated browser coverage.
 
 Project rules for agents working in this repository are in [AGENTS.md](AGENTS.md).

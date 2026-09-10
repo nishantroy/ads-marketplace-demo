@@ -104,6 +104,5 @@ export function RequestFunnel({ trace, scenario }: { trace: RequestTrace; scenar
         </div>
       </li>
     </ol>
-    <p className="small muted">Counts show who entered and survived each stage; bars show survivors relative to category matches. Earlier exclusions do not count as failures again.</p>
   </section>;
 }

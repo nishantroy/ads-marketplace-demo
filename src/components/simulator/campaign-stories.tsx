@@ -11,7 +11,7 @@ type StoryDefinition = {
   explanation: string;
   checkpointHour: number;
   checkpointLabel: string;
-  /** The hour unpaced wins in bulk, verified against the baseline run: barely anything before it, almost nothing after. */
+  /** One high-spend unpaced hour from the baseline run; not necessarily the entire spending window. */
   spikeHour?: number;
 };
 
@@ -26,7 +26,7 @@ const STORIES: StoryDefinition[] = [
   {
     campaignId: "electronics-c2",
     title: "Quiet, then a spike, then nothing",
-    explanation: "Unpaced, this campaign barely wins early — then, once bigger spenders exhaust their budgets, it wins in bulk for about an hour before its own budget runs out too. Paced, it wins steadily from the first hour instead of waiting for one brief window.",
+    explanation: "Unpaced, this campaign spends little in hour one, then most of its budget in hours two and three as the competitive field changes. With pacing, its spend is spread across all six hours instead of concentrated in that window.",
     checkpointHour: 1,
     checkpointLabel: "spent by 1h",
     spikeHour: 2,
@@ -34,7 +34,7 @@ const STORIES: StoryDefinition[] = [
   {
     campaignId: "home-c5",
     title: "An even sharper version of the same pattern",
-    explanation: "Unpaced, this lower bidder barely spends anything for three hours, then spends almost its entire remaining budget in a single hour once stronger competitors are gone. Paced, it competes gradually from the start instead of waiting for one narrow window.",
+    explanation: "Unpaced, this lower bidder barely spends anything for three hours, then spends almost its entire remaining budget in a single hour as competitors spend down their budgets. Paced, it spends gradually from the first hour instead of waiting for one narrow window.",
     checkpointHour: 3,
     checkpointLabel: "spent by 3h",
     spikeHour: 4,
@@ -70,7 +70,7 @@ export function CampaignStories({ campaigns, offTimeline, onTimeline, duration, 
   return <section className="campaign-stories" aria-labelledby="campaign-stories-heading">
     <div className="section-heading"><div><p className="eyebrow">Three campaign stories</p><h2 id="campaign-stories-heading">The same budget can tell different stories</h2></div></div>
     <p className="campaign-stories-intro">These are not “best” or “worst” campaigns. They show why pacing changes timing differently for different bids, quality, and opportunities.</p>
-    <p className="campaign-stories-intro">Each pair of charts below shows the same campaign two ways: when it is spending, and what it pays per impression as it wins. That price moves with real-time competition and with how relevant the ad is to each searcher — it is not fixed by the campaign’s own bid. Pacing’s value shows up here as steadier spending across the whole day, rather than one early rush or one late scramble.</p>
+    <p className="campaign-stories-intro">Each pair of charts below shows the same campaign two ways: when it is spending, and what it pays per impression as it wins. That price moves with real-time competition and with how relevant the ad is to each searcher — it is not simply equal to the campaign’s own bid. Pacing’s value shows up here as steadier spending across the whole day, rather than one early rush or one late scramble.</p>
     <div className="campaign-story-stack">
       {stories.map(({ story, campaign }) => {
         const offCheckpoint = cumulativeAtHour(offTimeline, campaign.id, story.checkpointHour);

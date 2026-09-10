@@ -14,12 +14,22 @@ const outcomes: Record<CandidateTrace["outcome"], string> = {
 /** One mode's funnel plus its optional implementation-detail arithmetic. */
 function RequestColumn({ trace, scenario, label }: { trace: RequestTrace; scenario: ScenarioSummary; label: string }) {
   const name = (id: string | null) => scenario.campaigns.find(c => c.id === id)?.name ?? id ?? "None";
+  const winner = trace.candidates.find(c => c.campaignId === trace.winnerCampaignId);
   return (
     <div className="request-column">
-      <p className="eyebrow">{label}</p>
+      <h2 className="request-mode-heading">{label}</h2>
+      <section className="request-winner-summary" aria-label={`${label} result`}>
+        <p className="eyebrow">{trace.filled ? "Winner" : "No ad served"}</p>
+        <h3>{trace.filled ? name(trace.winnerCampaignId) : "No eligible participant"}</h3>
+        <dl className="trace-facts">
+          <div><dt>Price charged</dt><dd>{money(trace.priceMicros)}{!trace.filled && " · no impression"}</dd></div>
+          {winner && <div><dt>Winner’s budget</dt><dd>{money(winner.budgetBeforeMicros)} → {money(winner.budgetAfterMicros)}<small>Before → after this auction</small></dd></div>}
+        </dl>
+        {!winner && <p className="small muted">No winner; no campaign’s budget was charged.</p>}
+      </section>
       <RequestFunnel trace={trace} scenario={scenario} />
       <details className="implementation-details">
-        <summary>Curious about the implementation?</summary>
+        <summary><strong>Inside this auction</strong><span>Follow each retrieved campaign through the funnel</span></summary>
         <p className="small muted">Expand a campaign for its quality, pacing decision, ranking, and budget arithmetic. Minimum quality ≥ {scenario.config.qualityThreshold}. Bids and prices are per impression.</p>
         {trace.candidates.map(candidate => (
           <details className="candidate-card" key={candidate.campaignId}>
@@ -48,14 +58,14 @@ function RequestColumn({ trace, scenario, label }: { trace: RequestTrace; scenar
           </details>
         ))}
       </details>
-      <p className="sheet-footnote">Quality decides who reaches the auction. Utility — bid times quality — decides who wins, and the winner is charged a price that reflects its own quality. Only campaigns eligible to win can support the price.</p>
     </div>
   );
 }
 
 /** Side-by-side comparison: one column per pacing mode, at the same request. */
-export function RequestSheet({ off, on, scenario, onClose }: {
+export function RequestSheet({ off, on, scenario, onClose, onAnother, loading, error }: {
   off: RequestTrace | null; on: RequestTrace | null; scenario: ScenarioSummary; onClose: () => void;
+  onAnother: () => void; loading: boolean; error: string | null;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const trace = off ?? on;
@@ -83,9 +93,15 @@ export function RequestSheet({ off, on, scenario, onClose }: {
         </header>
         <p className="muted">Session {sessionTime(trace.timestampMs)} · {scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId} · {trace.category}</p>
         <p className="small muted">Same request, both pacing modes. Compare which campaign wins and why.</p>
-        <div className="request-columns">
-          {off && <RequestColumn trace={off} scenario={scenario} label="Pacing off" />}
-          {on && <RequestColumn trace={on} scenario={scenario} label="Pacing on" />}
+        <div className="step-actions"><button className="button secondary" disabled={loading || scenario.requestCount < 2} onClick={onAnother}>{loading ? "Loading auction…" : "See another"}</button></div>
+        {error && <p role="alert" className="notice">{error}</p>}
+        <div className="inspector-guide">
+          <p><strong>How this auction works:</strong> Quality determines who qualifies, utility (bid × quality) determines who wins. Only eligible campaigns can affect the price.</p>
+          <p><strong>How to read the funnel:</strong> Counts show who entered and survived each stage. Bars show survivors; earlier exclusions aren’t counted again.</p>
+        </div>
+        <div className="request-columns" aria-busy={loading}>
+          {off && <RequestColumn key={`off-${off.requestId}`} trace={off} scenario={scenario} label="Pacing off" />}
+          {on && <RequestColumn key={`on-${on.requestId}`} trace={on} scenario={scenario} label="Pacing on" />}
         </div>
       </div>
     </dialog>
