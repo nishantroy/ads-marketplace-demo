@@ -186,6 +186,10 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .notice.compact { margin: 18px 0; display: block; }
 .error-notice { background: #f7e6e0; border-color: #e3bcae; color: #7a3c28; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 50; max-width: min(560px, 90vw); }
 .error-notice .text-button { margin-left: auto; color: inherit; }
+/* A document-level cue serves every guide stage, but only renders while content remains below the viewport. */
+.scroll-cue { position: fixed; right: 6vw; bottom: 24px; z-index: 90; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--wire); border-radius: 999px; padding: 8px 12px; background: var(--surface); color: var(--ink); box-shadow: 0 2px 12px rgba(22, 33, 29, .14); font-size: 12px; font-weight: 600; }
+.scroll-cue:hover { background: var(--paper); }
+.scroll-cue span { font-size: 16px; line-height: 1; }
 .panel { background: var(--surface); border: 1px solid var(--wire); border-radius: 4px; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }

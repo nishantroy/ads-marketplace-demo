@@ -11,6 +11,7 @@ import { OFF_COLOR, ON_COLOR } from "./timeline-chart";
 import { CampaignStories } from "./campaign-stories";
 import { SessionResults } from "./session-results";
 import { FunnelDiagram, type FunnelStage } from "./funnel-diagram";
+import { ScrollCue } from "./scroll-cue";
 
 const TimelineChart = dynamic(() => import("./timeline-chart").then(module => module.TimelineChart), { ssr: false, loading: () => <div className="timeline-chart chart-loading">Loading chart…</div> });
 
@@ -473,7 +474,8 @@ export function SimulatorPreview() {
             <p>Pacing off finished with <strong>{money(offRevenue)}</strong>; pacing on finished with <strong>{money(onRevenue)}</strong> —
               similar revenue, not a revenue lift from pacing in this experiment.</p>
             <p>Budgets are finite in both runs. Spending the same pool more evenly can buy more impressions at lower average prices and leave money available for later searches. More filled requests need not mean more revenue.</p>
-            <p>In this recorded session, pacing spreads spend more evenly instead of letting it front-load. Scroll down for a side-by-side comparison of the results over time. </p>
+            <p>In this recorded session, pacing spreads spend more evenly instead of letting it front-load. </p>
+            <p> Scroll down for a side-by-side comparison of the results over time. </p>
           </>}
         </aside>
 
@@ -546,6 +548,8 @@ export function SimulatorPreview() {
           <div className="table-footer"><span>{requestRows.length ? `Showing first ${requestRows.length} of ${requestTotal.toLocaleString()} requests` : "No requests"}</span></div>
         </section>
     </div>}
+
+    <ScrollCue />
 
     {railIndex >= 0 && <nav className="rail" aria-label="Guide progress">
       <button className="rail-dot rail-restart" onClick={() => goToStep("opening")}>

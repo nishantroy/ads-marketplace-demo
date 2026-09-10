@@ -275,8 +275,9 @@ The UI is a guided experiment, not an ad-operations dashboard. Lead with one que
 stage; reveal complexity progressively (overview → explanation → evidence, with formulas and arithmetic
 behind disclosures); connect outcomes to causes without asserting anything the recorded data cannot
 support; compare fairly (shared cursor, units, and axis bounds, modes labelled explicitly and never by colour
-alone); never imply paced results are automatically better; keep gaps as gaps, not zero prices; honour
-reduced motion; and say it in plain language before offering the math.
+alone); never imply paced results are automatically better; keep gaps as gaps, not zero prices; show a
+non-intrusive scroll cue only while content remains below the viewport; honour reduced motion; and say it in
+plain language before offering the math.
 
 ## Ideas for future extensions
 
