@@ -407,8 +407,8 @@ export function SimulatorPreview() {
 
         <h2> Why did we choose pacing as the variable for this demo? </h2>
         <p className="lede">Pacing is a simple concept (hold a campaign back when it’s spending too fast) but its effects ripple through the entire marketplace.
-        It changes who competes throughout the session, affecting which ads can be shown, campaign spending, and platform revenue.
-        These are the dynamics you can watch unfold—not a measurement of satisfaction or profit.</p>
+        It changes which campaigns are eligible to compete over time, which in turn changes auction outcomes and how opportunities are allocated across the day. 
+        These are the dynamics you can watch unfold.—not a measurement of satisfaction or profit.</p>
         <p className="lede">Quality predictions can also affect delivery, but this experiment holds the scores fixed rather than testing prediction improvements.
         Pacing is more distinctly an ads problem: deciding not just which ad should win, but when a campaign should compete at all.  </p>
         <div className="predict-block">

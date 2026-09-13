@@ -239,6 +239,10 @@ td small { display: block; color: var(--muted); font-family: var(--font-sans); m
 .sheet-inner { min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 40px 6vw; }
 .sheet-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 8px; }
 .sheet-header h2 { font-size: 27px; letter-spacing: -.3px; }
+.request-metadata { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 18px 0 0; padding: 16px 0; border-block: 1px solid var(--wire); }
+.request-metadata > div { min-width: 120px; }
+.request-metadata dt { color: var(--muted); font-size: 10px; }
+.request-metadata dd { margin: 3px 0 0; font-family: var(--font-mono); font-size: 12px; }
 .request-result { padding: 20px; border: 1px solid #e3cd9d; background: var(--gold-tint); border-radius: 4px; margin: 20px 0; }
 .request-result h3 { font-size: 21px; margin: 6px 0; }
 .request-result > p { font-size: 12px; margin-top: 8px; }

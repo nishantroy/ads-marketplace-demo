@@ -88,10 +88,16 @@ export function RequestSheet({ off, on, scenario, onClose, onAnother, loading, e
       onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="sheet-inner">
         <header className="sheet-header">
-          <div><p className="eyebrow">Inside one request · {trace.requestId}</p><h2 id="request-heading">{trace.query ?? trace.category}</h2></div>
+          <div><p className="eyebrow">Inside one request</p><h2 id="request-heading">Request details</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close request details" autoFocus>✕</button>
         </header>
-        <p className="muted">Session {sessionTime(trace.timestampMs)} · {scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId} · {trace.category}</p>
+        <dl className="request-metadata">
+          <div><dt>Search query</dt><dd>{trace.query ?? trace.category}</dd></div>
+          <div><dt>Request ID</dt><dd>{trace.requestId}</dd></div>
+          <div><dt>Session time</dt><dd>{sessionTime(trace.timestampMs)}</dd></div>
+          <div><dt>Username</dt><dd>{scenario.users.find(u => u.id === trace.userId)?.name ?? trace.userId}</dd></div>
+          <div><dt>Category</dt><dd>{trace.category}</dd></div>
+        </dl>
         <p className="small muted">Same request, both pacing modes. Compare which campaign wins and why.</p>
         <div className="step-actions"><button className="button secondary" disabled={loading || scenario.requestCount < 2} onClick={onAnother}>{loading ? "Loading auction…" : "See another"}</button></div>
         {error && <p role="alert" className="notice">{error}</p>}
