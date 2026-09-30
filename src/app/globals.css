@@ -15,6 +15,9 @@
   --font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Side gutter and the room reserved under the fixed rail; the phone block below tightens both. */
+  --gutter: 6vw;
+  --rail-h: 96px;
 }
 @theme inline {
   --color-background: var(--paper);
@@ -55,7 +58,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 
 /* ---- Film shell: a small sequence of full-viewport scenes, then a normal scrolling Explore page. ---- */
 .film { min-height: 100dvh; }
-.scene { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; padding: 6vh 6vw; position: relative; }
+.scene { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; padding: 6vh var(--gutter); position: relative; }
 .scene-opening { background: radial-gradient(120% 140% at 12% 8%, #1c3a34 0%, #16211d 42%, #0d1411 100%); color: var(--paper); align-items: flex-start; justify-content: center; }
 .scene-opening h1 { color: var(--paper); max-width: 22ch; }
 .scene-opening .lede { color: #c3d0c8; max-width: 46ch; }
@@ -85,7 +88,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
    structurally can't collide with content that only grows vertically down the page. Solid background on
    purpose: a translucent/blurred fixed panel over content that redraws every frame (the pacing scenes
    update the chart 15x/second) is a known source of stacking/compositing glitches in some browsers. */
-.rail { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 26px; padding: 16px 6vw; z-index: 100; background: var(--surface); border-bottom: 1px solid var(--wire); }
+.rail { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 26px; padding: 16px var(--gutter); z-index: 100; background: var(--surface); border-bottom: 1px solid var(--wire); }
 .rail { overflow-x: auto; }
 .rail-dot { flex-shrink: 0; display: flex; align-items: center; gap: 9px; color: var(--muted); white-space: nowrap; }
 .rail-dot .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--muted); background: var(--surface); flex-shrink: 0; }
@@ -101,9 +104,9 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
    edge exactly, with no seam, for the shape to read as one continuous funnel rather than stacked blocks. */
 .funnel { display: flex; flex-direction: column; gap: 0; width: 100%; max-width: 620px; }
 .funnel-row { display: flex; align-items: center; gap: 26px; border: 0; background: none; padding: 0; width: 100%; text-align: left; }
-/* Every shape lives in the same fixed-width, centered slot, so consecutive trapezoids share one center
+/* Every shape lives in a same-width, centered slot, so consecutive trapezoids share one center
    line and each one's bottom width lines up exactly with the next one's top width. */
-.funnel-shape-slot { flex-shrink: 0; display: flex; justify-content: center; }
+.funnel-shape-slot { flex: 0 0 380px; display: flex; justify-content: center; }
 .funnel-shape { height: 72px; flex-shrink: 0; background: var(--wire); transition: background .18s; }
 .funnel-row.done .funnel-shape { background: var(--ink); }
 .funnel-row.active .funnel-shape { background: var(--gold); }
@@ -116,7 +119,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 
 .hero-chart-scene .scene-content, .tutorial-scene .scene-content { max-width: 1560px; width: 100%; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); align-items: start; column-gap: 64px; row-gap: 8px; }
 .hero-chart-scene .scene-main, .tutorial-scene .scene-main { min-width: 0; }
-.tutorial-scene, .hero-chart-scene { padding-top: 96px; }
+.tutorial-scene, .hero-chart-scene { padding-top: var(--rail-h); }
 .tutorial-scene { padding-bottom: calc(6vh + 72px); }
 /* One shared text scale across every scene's heading and explainer copy, tutorial and pacing alike. */
 .hero-chart-scene h3, .tutorial-scene h3 { font-size: 27px; margin-bottom: 8px; }
@@ -126,9 +129,11 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .hero-chart-scene .scene-aside p:first-of-type, .tutorial-scene .scene-aside p:first-of-type { margin-top: 0; }
 .hero-chart-scene .scene-aside strong, .tutorial-scene .scene-aside strong { color: var(--ink); font-family: var(--font-mono); font-weight: 500; }
 .hero-chart-scene .step-actions { grid-column: 1 / -1; margin-top: 40px; display: flex; gap: 16px; }
-/* Pinned to a fixed spot at the foot of the scene so it holds still as stage copy changes length,
-   instead of drifting up and down (or sideways, when Back only sometimes rendered) with the content above it. */
-.tutorial-scene .step-actions { position: absolute; left: 50%; bottom: 6vh; transform: translateX(-50%); width: min(1560px, calc(100% - 12vw)); display: flex; gap: 16px; }
+/* On wide, tall viewports: pinned to a fixed spot at the foot of the scene so it holds still as stage copy
+   changes length, instead of drifting up and down (or sideways, when Back only sometimes rendered) with the
+   content above it. When the content cannot fit one viewport (narrow or short windows, see the media blocks
+   at the end), the footer flows after the explanation instead, so the content never covers it. */
+.tutorial-scene .step-actions { position: absolute; left: 50%; bottom: 6vh; transform: translateX(-50%); width: min(1560px, calc(100% - 2 * var(--gutter))); display: flex; gap: 16px; }
 .concept-points { list-style: none; margin: 22px 0 0; padding: 0; max-width: 48ch; }
 .concept-points li { padding: 16px 0; border-top: 1px solid var(--wire); font-size: 17px; line-height: 1.6; color: var(--muted); }
 .concept-points li:first-child { border-top: 0; padding-top: 20px; }
@@ -148,7 +153,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .chart-caption { color: var(--muted); font-size: 11px; margin-top: 14px; max-width: 60ch; }
 
 /* ---- Explore: a normal wide page, not a scene. ---- */
-.explore-page { padding: 96px 6vw 40px; max-width: 1500px; margin: 0 auto; }
+.explore-page { padding: var(--rail-h) var(--gutter) 40px; max-width: 1500px; margin: 0 auto; }
 .explore-page > .eyebrow { margin-bottom: 4px; }
 .explore-page > h1 { margin-bottom: 8px; }
 .explore-page > .lede { margin-bottom: 36px; }
@@ -187,7 +192,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .error-notice { background: #f7e6e0; border-color: #e3bcae; color: #7a3c28; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 50; max-width: min(560px, 90vw); }
 .error-notice .text-button { margin-left: auto; color: inherit; }
 /* A document-level cue serves every guide stage, but only renders while content remains below the viewport. */
-.scroll-cue { position: fixed; right: 6vw; bottom: 24px; z-index: 90; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--wire); border-radius: 999px; padding: 8px 12px; background: var(--surface); color: var(--ink); box-shadow: 0 2px 12px rgba(22, 33, 29, .14); font-size: 12px; font-weight: 600; }
+.scroll-cue { position: fixed; right: var(--gutter); bottom: 24px; z-index: 90; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--wire); border-radius: 999px; padding: 8px 12px; background: var(--surface); color: var(--ink); box-shadow: 0 2px 12px rgba(22, 33, 29, .14); font-size: 12px; font-weight: 600; }
 .scroll-cue:hover { background: var(--paper); }
 .scroll-cue span { font-size: 16px; line-height: 1; }
 .panel { background: var(--surface); border: 1px solid var(--wire); border-radius: 4px; }
@@ -222,7 +227,7 @@ select { border: 1px solid var(--wire); border-radius: 4px; background: var(--su
 .campaign-select { padding: 2px 4px; border: 0; border-bottom: 1px solid var(--wire); border-radius: 0; font-size: 11px; color: var(--muted); margin-top: 3px; }
 .requests-panel { overflow: hidden; }
 .requests-panel > .section-heading { padding: 22px 24px 16px; }
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow-x: auto; position: relative; }
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; white-space: nowrap; }
 th { background: var(--paper); color: var(--muted); font-size: 10px; font-weight: 600; padding: 10px 16px; border-block: 1px solid var(--wire); }
 td { padding: 13px 16px; border-bottom: 1px solid var(--wire); font-family: var(--font-mono); }
@@ -236,7 +241,7 @@ td small { display: block; color: var(--muted); font-family: var(--font-sans); m
    close button (not an edge to click past) is how you leave it. */
 .request-sheet { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: 100vw; max-height: 100dvh; margin: 0; padding: 0; border: 0; background: var(--paper); color: var(--ink); overflow-y: auto; }
 .request-sheet::backdrop { background: var(--paper); }
-.sheet-inner { min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 40px 6vw; }
+.sheet-inner { min-height: 100%; max-width: 1500px; margin: 0 auto; padding: 40px var(--gutter); }
 .sheet-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 8px; }
 .sheet-header h2 { font-size: 27px; letter-spacing: -.3px; }
 .request-metadata { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 18px 0 0; padding: 16px 0; border-block: 1px solid var(--wire); }
@@ -296,4 +301,55 @@ td small { display: block; color: var(--muted); font-family: var(--font-sans); m
 .trace-facts dd { margin: 0; font-family: var(--font-mono); }
 .trace-facts small { display: block; color: var(--muted); font-family: var(--font-sans); margin-top: 5px; font-size: 10px; }
 .sheet-footnote { font-size: 11px; color: var(--muted); line-height: 1.7; margin-top: 22px; }
+
+/* ---- Responsive overrides. Each matches the specificity of the desktop rule it overrides. ---- */
+/* Stacked: two-column layouts that are cramped on tablets and phones become one column. */
+@media (max-width: 899px) {
+  .hero-chart-scene .scene-content, .tutorial-scene .scene-content { grid-template-columns: minmax(0, 1fr); row-gap: 28px; }
+  .campaign-story { grid-template-columns: minmax(0, 1fr); }
+  .campaign-story-charts { grid-template-columns: minmax(0, 1fr); }
+  .chart-grid { grid-template-columns: minmax(0, 1fr); }
+  .trace-facts > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .scene:not(.scene-opening) { padding-top: var(--rail-h); }
+}
+/* Tutorial footer flows after the explanation whenever the content cannot fit one viewport. */
+@media (max-width: 899px), (max-height: 699px) {
+  .tutorial-scene .step-actions { position: static; transform: none; width: auto; margin-top: 28px; }
+  .tutorial-scene { padding-bottom: 6vh; }
+}
+/* Phone: tighter gutters and type, a scalable funnel, stacked request columns, and touch-sized controls. */
+@media (max-width: 599px) {
+  :root { --gutter: max(16px, 4vw); --rail-h: 72px; }
+  .funnel-row { gap: 14px; }
+  .funnel-shape-slot { max-width: 62%; }
+  .funnel-shape { height: 52px; }
+  .funnel-text { flex: 1 1 0; min-width: 0; }
+  .funnel-label { font-size: 15px; }
+  .request-columns { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .rail { padding: 10px var(--gutter); gap: 14px; scrollbar-width: none; }
+  .rail-dot { min-height: 40px; }
+  .rail-dot span { font-size: 11px; }
+  .rail-restart { padding-right: 14px; }
+  .hero-chart-scene h3, .tutorial-scene h3 { font-size: 22px; }
+  .hero-chart-scene .scene-aside h2, .tutorial-scene .scene-aside h2 { font-size: 21px; }
+  .hero-chart-scene .scene-aside p, .tutorial-scene .scene-aside p { font-size: 16px; }
+  .concept-points li { font-size: 15px; }
+  .lede { font-size: 16px; }
+  .request-column > .request-mode-heading { font-size: 24px; }
+  .results-highlights strong { font-size: 21px; }
+  .timeline-chart { height: 220px; }
+  .hero-chart-wrap .timeline-chart { height: min(40vh, 320px); }
+  .small-charts .timeline-chart { height: 200px; }
+  .sheet-inner { padding: 24px var(--gutter); }
+  .campaign-story { padding: 18px 16px; }
+  .results-highlights article { padding: 18px; }
+  .campaign-select { font-size: 16px; }
+  .button { min-height: 44px; }
+  .inspect-button, .text-button { min-height: 44px; }
+  .icon-button { width: 44px; height: 44px; }
+  .step-actions { flex-wrap: wrap; }
+  /* Spans the gutters and sits above the scroll cue (z-index 90) while it is shown. */
+  .error-notice { flex-wrap: wrap; bottom: 12px; left: var(--gutter); right: var(--gutter); transform: none; max-width: none; z-index: 95; }
+  .scroll-cue { bottom: 16px; }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before { transition: none !important; } }
