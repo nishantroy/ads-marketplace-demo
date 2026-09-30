@@ -40,8 +40,8 @@ npm run diagnose     # regenerate docs/m2-diagnostics.md, the paired-run report 
 
 There is nothing to configure: opening the app computes both runs and starts the guide. Each stage has its
 own URL (`/marketplace`, `/how-it-works`, `/briefing`, `/pacing-off`, `/pacing-on`, `/compare`, `/explore`, `/explore-requests`), so a reload
-lands back where you were and the browser's back/forward buttons move through the guide. A rail on the
-right jumps to any stage; nothing is locked behind watching a stage play out.
+lands back where you were and the browser's back/forward buttons move through the guide. A rail along
+the top jumps to any stage; nothing is locked behind watching a stage play out.
 
 1. **Opening** — the question the demo answers.
 2. **The marketplace** — why users search, why advertisers pay for attention, and why the platform balances
@@ -266,6 +266,8 @@ many candidates were admitted, since pacing throttles admissions by design.
 - `src/lib/fixtures/` the tiny hand-calculable scenario and the baseline/small generator presets.
 - `src/lib/server/` the stateless run service, per-instance cache, input validation, and engine adapter.
 - `src/app/` Next.js App Router pages, the catch-all route that maps stage URLs to the guide, styles, and API routes.
+  `globals.css` holds the desktop rules plus the 899 px (stacked) and 599 px (phone) overrides and a short-window
+  (under 700 px tall) rule for the tutorial footer.
 - `src/components/simulator/` the guided-scene controller, amCharts views, campaign stories, funnel diagram, and the side-by-side request sheet.
 - `docs/m2-diagnostics.md` the generated paired-run report for the baseline.
 
@@ -278,6 +280,14 @@ support; compare fairly (shared cursor, units, and axis bounds, modes labelled e
 alone); never imply paced results are automatically better; keep gaps as gaps, not zero prices; show a
 non-intrusive scroll cue only while content remains below the viewport; honour reduced motion; and say it in
 plain language before offering the math.
+
+The guide is usable on phones and tablets as well as desktop. From 900 px up the scenes use the two-column
+layout. Below 900 px the two-column scenes stack (chart or funnel, then the explanation, then the stage
+actions), and campaign stories and evidence charts stack too. Below 600 px the request inspector shows
+pacing off above pacing on, each still labelled by its heading, and the funnel scales with the viewport.
+In windows shorter than 700 px the tutorial's Back/Next buttons flow after the content instead of being
+pinned to the foot of the scene. Dense data tables scroll sideways inside their panel rather than widening
+the page.
 
 ## Ideas for future extensions
 
@@ -296,14 +306,14 @@ plain language before offering the math.
   realised value rather than predicted engagement.
 - **Persistence and sharing** — save a tweaked scenario and its results behind a URL. Deliberately not
   built for the demo; the engine and contracts were designed so it can be added without touching them.
-  - **Responsible UX** — the current demo was built explicitly for desktop, and doesn't work seamless on mobile devices.
 
 ## Status
 
 Complete as a local prototype and deployed as a demo: shared contracts, the pure engine with unit tests and
 a determinism guard, the seeded marketplace and paired diagnostics, the invariant checker, the stateless
 live-demo API, and the guided UI. Verification is typecheck, lint, unit tests, and build, plus manual
-browser review; automated browser tests are intentionally not part of this build.
+browser review at 360–430, 768, 1024 and 1440 px widths and a 1280×620 window; automated browser tests are
+intentionally not part of this build.
 
 The education/inspection UI pass changes presentation and navigation only: no simulation-engine, fixture,
 contract, or API changes. The full suite has 56 tests (including the 9 diagnostics checks). Random request

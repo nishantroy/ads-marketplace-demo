@@ -138,6 +138,7 @@ export function SimulatorPreview() {
   const [inspecting, setInspecting] = useState<{ off: RequestTrace | null; on: RequestTrace | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const railRef = useRef<HTMLElement>(null);
 
   const offRun = runs.find(r => !r.pacingEnabled) ?? null;
   const onRun = runs.find(r => r.pacingEnabled) ?? null;
@@ -205,6 +206,20 @@ export function SimulatorPreview() {
     applyStep(next);
     window.history.pushState(null, "", STEP_SLUGS[next]);
   }
+  // On narrow screens the rail scrolls sideways; bring the active stage into view when it is off-screen.
+  // Scrolls only the rail (never scrollIntoView, which can move the window) and is a no-op when every
+  // stage already fits. Back/forward navigation also changes `step`, so it is covered too.
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const dot = rail.querySelector<HTMLElement>('[aria-current="step"]');
+    if (!dot) return;
+    const visible = dot.offsetLeft >= rail.scrollLeft && dot.offsetLeft + dot.offsetWidth <= rail.scrollLeft + rail.clientWidth;
+    if (visible) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    rail.scrollTo({ left: dot.offsetLeft - (rail.clientWidth - dot.offsetWidth) / 2, behavior });
+  }, [step]);
+
   // Keep the browser's back/forward buttons in sync with the guided sequence.
   useEffect(() => {
     const onPopState = () => applyStep(stepFromLocation());
@@ -551,7 +566,7 @@ export function SimulatorPreview() {
 
     <ScrollCue />
 
-    {railIndex >= 0 && <nav className="rail" aria-label="Guide progress">
+    {railIndex >= 0 && <nav ref={railRef} className="rail" aria-label="Guide progress">
       <button className="rail-dot rail-restart" onClick={() => goToStep("opening")}>
         <span className="dot" aria-hidden="true" /><span>Start over</span>
       </button>

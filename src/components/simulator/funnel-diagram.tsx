@@ -5,11 +5,11 @@ export interface FunnelStage {
   width: number;
 }
 
-const MAX_SHAPE_WIDTH_PX = 380;
-
 /**
  * A narrowing funnel built from CSS trapezoids, not SVG or a chart library. The label sits beside the
- * shape, not inside it, so it stays fully readable even for the narrowest bands near the bottom.
+ * shape, not inside it, so it stays fully readable even for the narrowest bands near the bottom. Every
+ * shape is a percentage of one same-width slot (sized in globals.css), so the funnel scales with the
+ * viewport while consecutive bands keep sharing a centre line and meeting edge to edge.
  */
 export function FunnelDiagram({ stages, activeIndex, doneUpTo, onSelect }: {
   stages: FunnelStage[];
@@ -20,7 +20,6 @@ export function FunnelDiagram({ stages, activeIndex, doneUpTo, onSelect }: {
 }) {
   return <div className="funnel" role="list" aria-label="Ad delivery stages">
     {stages.map((stage, index) => {
-      const widthPx = stage.width * MAX_SHAPE_WIDTH_PX;
       const nextWidth = stages[index + 1]?.width ?? stage.width * 0.3;
       const bottomPct = (nextWidth / stage.width) * 100;
       const inset = (100 - bottomPct) / 2;
@@ -29,8 +28,8 @@ export function FunnelDiagram({ stages, activeIndex, doneUpTo, onSelect }: {
       return <div key={stage.id} role="listitem">
         <button type="button" className={`funnel-row ${state}`}
           onClick={() => onSelect(index)} aria-current={index === activeIndex ? "step" : undefined}>
-          <span className="funnel-shape-slot" style={{ width: `${MAX_SHAPE_WIDTH_PX}px` }}>
-            <span className="funnel-shape" style={{ width: `${widthPx}px`, clipPath: isLast ? undefined : `polygon(0 0, 100% 0, ${100 - inset}% 100%, ${inset}% 100%)` }} aria-hidden="true" />
+          <span className="funnel-shape-slot">
+            <span className="funnel-shape" style={{ width: `${(stage.width * 100).toFixed(2)}%`, clipPath: isLast ? undefined : `polygon(0 0, 100% 0, ${100 - inset}% 100%, ${inset}% 100%)` }} aria-hidden="true" />
           </span>
           <span className="funnel-text"><span className="funnel-index">{index + 1}</span><span className="funnel-label">{stage.label}</span></span>
         </button>
